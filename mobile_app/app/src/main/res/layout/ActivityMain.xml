@@ -22,6 +22,7 @@
         android:layout_width="match_parent"
         android:layout_height="match_parent"
         android:layout_marginTop="10dp">
+
         <TextView
             android:id="@+id/txtResults"
             android:layout_width="match_parent"
@@ -29,4 +30,5 @@
             android:text="Results will appear here..."
             android:textSize="14sp" />
     </ScrollView>
+
 </LinearLayout>

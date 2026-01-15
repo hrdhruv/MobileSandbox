@@ -1,3 +1,5 @@
+package com.example.dataleakage
+
 interface AnalysisApi {
     @POST("/analyze")
     suspend fun getAnalysis(@Body request: ScanRequest): AnalysisResponse
