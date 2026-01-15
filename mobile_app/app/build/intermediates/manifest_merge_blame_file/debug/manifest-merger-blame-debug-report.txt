@@ -1,0 +1,83 @@
+1<?xml version="1.0" encoding="utf-8"?>
+2<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+3    package="com.example.dataleakage"
+4    android:versionCode="1"
+5    android:versionName="1.0" >
+6
+7    <uses-sdk
+8        android:minSdkVersion="26"
+9        android:targetSdkVersion="33" />
+10
+11    <uses-permission android:name="android.permission.INTERNET" />
+11-->/home/harsh-d/Desktop/MobileSandbox/mobile_app/app/src/main/AndroidManifest.xml:5:5-67
+11-->/home/harsh-d/Desktop/MobileSandbox/mobile_app/app/src/main/AndroidManifest.xml:5:22-64
+12    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
+12-->/home/harsh-d/Desktop/MobileSandbox/mobile_app/app/src/main/AndroidManifest.xml:6:5-8:53
+12-->/home/harsh-d/Desktop/MobileSandbox/mobile_app/app/src/main/AndroidManifest.xml:7:9-61
+13
+14    <permission
+14-->[androidx.core:core:1.9.0] /home/harsh-d/.gradle/caches/transforms-3/770154be7da75cb4f77922235f33a392/transformed/core-1.9.0/AndroidManifest.xml:22:5-24:47
+15        android:name="com.example.dataleakage.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
+15-->[androidx.core:core:1.9.0] /home/harsh-d/.gradle/caches/transforms-3/770154be7da75cb4f77922235f33a392/transformed/core-1.9.0/AndroidManifest.xml:23:9-81
+16        android:protectionLevel="signature" />
+16-->[androidx.core:core:1.9.0] /home/harsh-d/.gradle/caches/transforms-3/770154be7da75cb4f77922235f33a392/transformed/core-1.9.0/AndroidManifest.xml:24:9-44
+17
+18    <uses-permission android:name="com.example.dataleakage.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION" />
+18-->[androidx.core:core:1.9.0] /home/harsh-d/.gradle/caches/transforms-3/770154be7da75cb4f77922235f33a392/transformed/core-1.9.0/AndroidManifest.xml:26:5-97
+18-->[androidx.core:core:1.9.0] /home/harsh-d/.gradle/caches/transforms-3/770154be7da75cb4f77922235f33a392/transformed/core-1.9.0/AndroidManifest.xml:26:22-94
+19
+20    <application
+20-->/home/harsh-d/Desktop/MobileSandbox/mobile_app/app/src/main/AndroidManifest.xml:10:5-25:19
+21        android:allowBackup="true"
+21-->/home/harsh-d/Desktop/MobileSandbox/mobile_app/app/src/main/AndroidManifest.xml:11:9-35
+22        android:appComponentFactory="androidx.core.app.CoreComponentFactory"
+22-->[androidx.core:core:1.9.0] /home/harsh-d/.gradle/caches/transforms-3/770154be7da75cb4f77922235f33a392/transformed/core-1.9.0/AndroidManifest.xml:28:18-86
+23        android:debuggable="true"
+24        android:extractNativeLibs="false"
+25        android:label="Data Leakage Sandbox"
+25-->/home/harsh-d/Desktop/MobileSandbox/mobile_app/app/src/main/AndroidManifest.xml:12:9-45
+26        android:testOnly="true"
+27        android:theme="@style/Theme.AppCompat.Light.DarkActionBar" >
+27-->/home/harsh-d/Desktop/MobileSandbox/mobile_app/app/src/main/AndroidManifest.xml:13:9-67
+28        <activity
+28-->/home/harsh-d/Desktop/MobileSandbox/mobile_app/app/src/main/AndroidManifest.xml:15:9-24:20
+29            android:name="com.example.dataleakage.MainActivity"
+29-->/home/harsh-d/Desktop/MobileSandbox/mobile_app/app/src/main/AndroidManifest.xml:16:13-41
+30            android:exported="true" >
+30-->/home/harsh-d/Desktop/MobileSandbox/mobile_app/app/src/main/AndroidManifest.xml:17:13-36
+31            <intent-filter>
+31-->/home/harsh-d/Desktop/MobileSandbox/mobile_app/app/src/main/AndroidManifest.xml:19:13-22:29
+32                <action android:name="android.intent.action.MAIN" />
+32-->/home/harsh-d/Desktop/MobileSandbox/mobile_app/app/src/main/AndroidManifest.xml:20:17-69
+32-->/home/harsh-d/Desktop/MobileSandbox/mobile_app/app/src/main/AndroidManifest.xml:20:25-66
+33
+34                <category android:name="android.intent.category.LAUNCHER" />
+34-->/home/harsh-d/Desktop/MobileSandbox/mobile_app/app/src/main/AndroidManifest.xml:21:17-77
+34-->/home/harsh-d/Desktop/MobileSandbox/mobile_app/app/src/main/AndroidManifest.xml:21:27-74
+35            </intent-filter>
+36        </activity>
+37
+38        <provider
+38-->[androidx.emoji2:emoji2:1.2.0] /home/harsh-d/.gradle/caches/transforms-3/458235646f902898bb7c4c3c7f4969cd/transformed/emoji2-1.2.0/AndroidManifest.xml:24:9-32:20
+39            android:name="androidx.startup.InitializationProvider"
+39-->[androidx.emoji2:emoji2:1.2.0] /home/harsh-d/.gradle/caches/transforms-3/458235646f902898bb7c4c3c7f4969cd/transformed/emoji2-1.2.0/AndroidManifest.xml:25:13-67
+40            android:authorities="com.example.dataleakage.androidx-startup"
+40-->[androidx.emoji2:emoji2:1.2.0] /home/harsh-d/.gradle/caches/transforms-3/458235646f902898bb7c4c3c7f4969cd/transformed/emoji2-1.2.0/AndroidManifest.xml:26:13-68
+41            android:exported="false" >
+41-->[androidx.emoji2:emoji2:1.2.0] /home/harsh-d/.gradle/caches/transforms-3/458235646f902898bb7c4c3c7f4969cd/transformed/emoji2-1.2.0/AndroidManifest.xml:27:13-37
+42            <meta-data
+42-->[androidx.emoji2:emoji2:1.2.0] /home/harsh-d/.gradle/caches/transforms-3/458235646f902898bb7c4c3c7f4969cd/transformed/emoji2-1.2.0/AndroidManifest.xml:29:13-31:52
+43                android:name="androidx.emoji2.text.EmojiCompatInitializer"
+43-->[androidx.emoji2:emoji2:1.2.0] /home/harsh-d/.gradle/caches/transforms-3/458235646f902898bb7c4c3c7f4969cd/transformed/emoji2-1.2.0/AndroidManifest.xml:30:17-75
+44                android:value="androidx.startup" />
+44-->[androidx.emoji2:emoji2:1.2.0] /home/harsh-d/.gradle/caches/transforms-3/458235646f902898bb7c4c3c7f4969cd/transformed/emoji2-1.2.0/AndroidManifest.xml:31:17-49
+45            <meta-data
+45-->[androidx.lifecycle:lifecycle-process:2.4.1] /home/harsh-d/.gradle/caches/transforms-3/dafa2e943799eacb65d547cfb00a5533/transformed/lifecycle-process-2.4.1/AndroidManifest.xml:31:13-33:52
+46                android:name="androidx.lifecycle.ProcessLifecycleInitializer"
+46-->[androidx.lifecycle:lifecycle-process:2.4.1] /home/harsh-d/.gradle/caches/transforms-3/dafa2e943799eacb65d547cfb00a5533/transformed/lifecycle-process-2.4.1/AndroidManifest.xml:32:17-78
+47                android:value="androidx.startup" />
+47-->[androidx.lifecycle:lifecycle-process:2.4.1] /home/harsh-d/.gradle/caches/transforms-3/dafa2e943799eacb65d547cfb00a5533/transformed/lifecycle-process-2.4.1/AndroidManifest.xml:33:17-49
+48        </provider>
+49    </application>
+50
+51</manifest>
