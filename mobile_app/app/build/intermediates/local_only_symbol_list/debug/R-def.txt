@@ -3,3 +3,4 @@ local
 id btnScan
 id txtResults
 layout activity_main
+xml network_security_config

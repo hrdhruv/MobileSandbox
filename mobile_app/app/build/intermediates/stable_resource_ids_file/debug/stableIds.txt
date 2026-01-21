@@ -1,3 +1,4 @@
+com.example.dataleakage:xml/network_security_config = 0x7f110000
 com.example.dataleakage:styleable/ViewStubCompat = 0x7f100090
 com.example.dataleakage:styleable/ViewPager2 = 0x7f10008f
 com.example.dataleakage:styleable/Transition = 0x7f10008b
