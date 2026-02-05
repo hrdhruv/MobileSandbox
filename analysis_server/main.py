@@ -36,8 +36,11 @@ async def analyze(data: AppData):
 
 @app.post("/feedback")
 async def feedback(data: FeedbackData):
-    ml_engine.adaptive_update(data.permissions, data.is_malware)
-    return {"status": "model updated"}
+    ml_engine.adaptive_update(
+        data.permissions,
+        data.is_malware
+    )
+    return {"status": "adaptive learning update applied"}
 
 
 if __name__ == "__main__":

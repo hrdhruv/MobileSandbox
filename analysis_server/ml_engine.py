@@ -1,106 +1,128 @@
 import pandas as pd
-import numpy as np
-from sklearn.ensemble import RandomForestClassifier
-from sklearn.impute import SimpleImputer
-import joblib
 import os
+import json
+import re
 
-model = None
-feature_columns = []
-imputer = None
+MODEL_FILE = "model_weights.json"
 
-MODEL_FILE = "model.pkl"
+behavior_risk = {}
+permission_risk = {}
 
-# ✅ HARD MAPPING: Android permission → dataset feature prefixes
-PERMISSION_TO_DATASET = {
-    "INTERNET": ["NETWORK_ACCESS"],
-    "ACCESS_NETWORK_STATE": ["NETWORK_ACCESS"],
+LABEL_COLUMNS = ["Class", "class", "label", "Label", "malware"]
 
-    "SEND_SMS": ["SMS_SEND"],
-    "READ_SMS": ["SMS"],
-    "RECEIVE_SMS": ["SMS"],
-
-    "READ_CONTACTS": ["ACCESS_PERSONAL_INFO"],
-    "WRITE_CONTACTS": ["ACCESS_PERSONAL_INFO"],
-
-    "READ_PHONE_STATE": ["ALTER_PHONE_STATE"],
-    "CALL_PHONE": ["ALTER_PHONE_STATE"],
-
-    "READ_EXTERNAL_STORAGE": ["FS_ACCESS"],
-    "WRITE_EXTERNAL_STORAGE": ["FS_ACCESS"],
-
-    "CAMERA": ["DEVICE_ACCESS"],
-    "RECORD_AUDIO": ["DEVICE_ACCESS"],
-
-    "ACCESS_FINE_LOCATION": ["DEVICE_ACCESS"],
-    "ACCESS_COARSE_LOCATION": ["DEVICE_ACCESS"],
+BASE_PERMISSION_RISK = {
+    "INTERNET": 5,
+    "READ_CONTACTS": 20,
+    "READ_SMS": 30,
+    "RECORD_AUDIO": 25,
+    "ACCESS_FINE_LOCATION": 15,
+    "ACCESS_COARSE_LOCATION": 10,
 }
 
 
-def train_from_csv(csv_path: str):
-    global model, feature_columns, imputer
+# ---------- Utilities ----------
+
+def detect_label_column(df):
+    for col in LABEL_COLUMNS:
+        if col in df.columns:
+            return col
+    raise ValueError("Label column not found")
+
+
+def normalize_label(val):
+    if isinstance(val, str):
+        return val.lower() in ["malware", "1", "true"]
+    return bool(val)
+
+
+def clean_name(name):
+    name = name.upper()
+    name = re.sub(r"[^A-Z_]", "", name)
+    return name.strip("_")
+
+
+# ---------- Persistence ----------
+
+def save_model():
+    with open(MODEL_FILE, "w") as f:
+        json.dump({
+            "behavior_risk": behavior_risk,
+            "permission_risk": permission_risk
+        }, f)
+
+
+def load_model():
+    global behavior_risk, permission_risk
+    if os.path.exists(MODEL_FILE):
+        with open(MODEL_FILE, "r") as f:
+            data = json.load(f)
+            behavior_risk = data.get("behavior_risk", {})
+            permission_risk = data.get("permission_risk", {})
+
+
+# ---------- Dataset Learning (CORRECT FOR COUNTS) ----------
+
+def train_from_csv(csv_path):
+    global behavior_risk
+
+    if not os.path.exists(csv_path):
+        load_model()
+        return
 
     df = pd.read_csv(csv_path)
+    label_col = detect_label_column(df)
+    print(f"Detected label column: {label_col}")
 
-    X = df.drop(columns=["Class"])
-    y = df["Class"]
+    df["_label_"] = df[label_col].apply(normalize_label)
+    malware_df = df[df["_label_"] == True]
 
-    feature_columns = list(X.columns)
+    learned = {}
 
-    imputer = SimpleImputer(strategy="constant", fill_value=0)
-    X_clean = imputer.fit_transform(X)
+    malware_count = len(malware_df)
 
-    model = RandomForestClassifier(
-        n_estimators=150,
-        random_state=42,
-        class_weight="balanced"
-    )
-    model.fit(X_clean, y)
+    for col in df.columns:
+        if col in [label_col, "_label_"]:
+            continue
 
-    joblib.dump((model, feature_columns, imputer), MODEL_FILE)
-    print("✅ Model trained")
-    print("Feature count:", len(feature_columns))
+        if not pd.api.types.is_numeric_dtype(df[col]):
+            continue
+
+        # Count how many malware samples used this feature
+        usage = (malware_df[col] > 0).sum()
+
+        if usage == 0:
+            continue
+
+        # Normalize by malware sample count
+        risk_score = usage / malware_count
+
+        learned[clean_name(col)] = round(float(risk_score * 100), 3)
+
+    behavior_risk = learned
+    save_model()
+
+    print(f"Behavioral features learned: {len(behavior_risk)}")
 
 
-def analyze_permissions(permission_list: list[str]):
-    global model, feature_columns, imputer
+# ---------- Android Analysis ----------
 
-    if model is None:
-        model, feature_columns, imputer = joblib.load(MODEL_FILE)
+def analyze_permissions(android_permissions):
+    score = 0
+    flags = []
 
-    input_vector = np.zeros(len(feature_columns))
-    detected = []
+    for perm in android_permissions:
+        key = perm.split(".")[-1].upper()
 
-    for perm in permission_list:
-        clean = perm.split(".")[-1].upper()
+        if key in BASE_PERMISSION_RISK:
+            score += BASE_PERMISSION_RISK[key]
+            flags.append(key)
 
-        if clean in PERMISSION_TO_DATASET:
-            prefixes = PERMISSION_TO_DATASET[clean]
+        if key in permission_risk:
+            score += permission_risk[key]
 
-            for i, col in enumerate(feature_columns):
-                if any(col.startswith(p) for p in prefixes):
-                    input_vector[i] = 1
-                    detected.append(col)
-
-    activated = int(np.sum(input_vector))
-    print("Activated features:", activated)
-    print("Detected columns:", detected[:10])
-
-    if activated == 0:
-        return {
-            "level": "UNKNOWN",
-            "score": 0,
-            "flags": ["No behavioral features activated"]
-        }
-
-    input_vector = imputer.transform([input_vector])
-
-    prob = model.predict_proba(input_vector)[0][1]
-    score = int(min(100, prob * 120))
-
-    if score >= 80:
+    if score > 50:
         level = "DANGEROUS"
-    elif score >= 40:
+    elif score > 20:
         level = "SUSPICIOUS"
     else:
         level = "SAFE"
@@ -108,9 +130,17 @@ def analyze_permissions(permission_list: list[str]):
     return {
         "level": level,
         "score": score,
-        "flags": list(set(detected))[:5]
+        "flags": flags
     }
 
 
-def adaptive_update(permissions, is_malware):
-    pass
+# ---------- Adaptive Learning ----------
+
+def adaptive_update(android_permissions, is_malware):
+    delta = 3 if is_malware else -1
+
+    for perm in android_permissions:
+        key = perm.split(".")[-1].upper()
+        permission_risk[key] = permission_risk.get(key, 0) + delta
+
+    save_model()
