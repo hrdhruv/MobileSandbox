@@ -5,8 +5,6 @@ import ml_engine
 
 app = FastAPI()
 
-CSV_PATH = "dataset/data.csv"
-
 
 class AppData(BaseModel):
     package_name: str
@@ -20,16 +18,20 @@ class FeedbackData(BaseModel):
 
 @app.on_event("startup")
 def startup_event():
-    ml_engine.train_from_csv(CSV_PATH)
+    ml_engine.load_or_train()
 
 
 @app.post("/analyze")
 async def analyze(data: AppData):
     result = ml_engine.analyze_permissions(data.permissions)
+
     return {
         "app": data.package_name,
         "risk_level": result["level"],
-        "score": result["score"],
+        "score": int(result["score"]),  # IMPORTANT: send INT to Android
+        "leak_type": result["leak_type"],
+        "pii_detected": result["pii_detected"],
+        "sensitive_detected": result["sensitive_detected"],
         "detected_threats": result["flags"]
     }
 

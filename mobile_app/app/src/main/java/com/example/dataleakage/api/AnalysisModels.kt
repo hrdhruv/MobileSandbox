@@ -9,5 +9,8 @@ data class AnalysisResponse(
     val app: String,
     val risk_level: String,
     val score: Int,
+    val leak_type: String,
+    val pii_detected: List<String>,
+    val sensitive_detected: List<String>,
     val detected_threats: List<String>
 )

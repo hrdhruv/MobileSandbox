@@ -3,30 +3,34 @@ import os
 import json
 import re
 
-MODEL_FILE = "model_weights.json"
+# ================= CONFIG =================
 
-behavior_risk = {}
-permission_risk = {}
+CSV_PATH = "dataset/data.csv"
+MODEL_FILE = "model_weights.json"
 
 LABEL_COLUMNS = ["Class", "class", "label", "Label", "malware"]
 
-BASE_PERMISSION_RISK = {
-    "INTERNET": 5,
-    "READ_CONTACTS": 20,
-    "READ_SMS": 30,
-    "RECORD_AUDIO": 25,
-    "ACCESS_FINE_LOCATION": 15,
-    "ACCESS_COARSE_LOCATION": 10,
-}
+PII_KEYWORDS = [
+    "CONTACT", "SMS", "CALL", "PHONE", "ACCOUNT",
+    "EMAIL", "LOCATION", "GPS", "IMEI", "IMSI"
+]
 
+SENSITIVE_KEYWORDS = [
+    "AUDIO", "CAMERA", "MIC", "STORAGE",
+    "FILE", "FS", "SYSTEM", "PROCESS",
+    "EXEC", "DEBUG", "ROOT", "DEVICE", "NETWORK"
+]
 
-# ---------- Utilities ----------
+# GLOBAL MODEL STORAGE
+feature_risk = {}
+
+# ================= UTILITIES =================
 
 def detect_label_column(df):
     for col in LABEL_COLUMNS:
         if col in df.columns:
             return col
-    raise ValueError("Label column not found")
+    raise ValueError("Label column not found in dataset")
 
 
 def normalize_label(val):
@@ -41,31 +45,70 @@ def clean_name(name):
     return name.strip("_")
 
 
-# ---------- Persistence ----------
+def classify_feature(name):
+    for k in PII_KEYWORDS:
+        if k in name:
+            return "PII"
+    for k in SENSITIVE_KEYWORDS:
+        if k in name:
+            return "SENSITIVE"
+    return "LOW_RISK"
+
+
+def semantic_match(permission, feature):
+    p = permission.upper()
+    f = feature.upper()
+
+    for kw in PII_KEYWORDS + SENSITIVE_KEYWORDS:
+        if kw in p and kw in f:
+            return True
+    return False
+
+
+# ================= MODEL PERSISTENCE =================
 
 def save_model():
+    global feature_risk
     with open(MODEL_FILE, "w") as f:
-        json.dump({
-            "behavior_risk": behavior_risk,
-            "permission_risk": permission_risk
-        }, f)
+        json.dump(feature_risk, f)
 
 
 def load_model():
-    global behavior_risk, permission_risk
-    if os.path.exists(MODEL_FILE):
-        with open(MODEL_FILE, "r") as f:
-            data = json.load(f)
-            behavior_risk = data.get("behavior_risk", {})
-            permission_risk = data.get("permission_risk", {})
+    global feature_risk
+
+    if not os.path.exists(MODEL_FILE):
+        print("No saved model found. Starting fresh.")
+        feature_risk = {}
+        return
+
+    with open(MODEL_FILE, "r") as f:
+        data = json.load(f)
+
+    # Handle wrapped structure
+    if "behavior_risk" in data:
+        raw = data["behavior_risk"]
+        feature_risk = {}
+
+        for feature, risk_value in raw.items():
+            cleaned = clean_name(feature)
+            feature_risk[cleaned] = {
+                "risk": float(risk_value),
+                "type": classify_feature(cleaned)
+            }
+
+    else:
+        feature_risk = data
+
+    print(f"Loaded model with {len(feature_risk)} features")
 
 
-# ---------- Dataset Learning (CORRECT FOR COUNTS) ----------
+# ================= TRAINING =================
 
 def train_from_csv(csv_path):
-    global behavior_risk
+    global feature_risk
 
     if not os.path.exists(csv_path):
+        print("Dataset not found. Loading saved model instead.")
         load_model()
         return
 
@@ -76,9 +119,11 @@ def train_from_csv(csv_path):
     df["_label_"] = df[label_col].apply(normalize_label)
     malware_df = df[df["_label_"] == True]
 
-    learned = {}
+    if len(malware_df) == 0:
+        print("No malware rows found. Skipping training.")
+        return
 
-    malware_count = len(malware_df)
+    learned = {}
 
     for col in df.columns:
         if col in [label_col, "_label_"]:
@@ -87,60 +132,92 @@ def train_from_csv(csv_path):
         if not pd.api.types.is_numeric_dtype(df[col]):
             continue
 
-        # Count how many malware samples used this feature
         usage = (malware_df[col] > 0).sum()
-
         if usage == 0:
             continue
 
-        # Normalize by malware sample count
-        risk_score = usage / malware_count
+        risk_score = usage / len(malware_df)
+        cleaned = clean_name(col)
 
-        learned[clean_name(col)] = round(float(risk_score * 100), 3)
+        learned[cleaned] = {
+            "risk": round(risk_score * 100, 2),
+            "type": classify_feature(cleaned)
+        }
 
-    behavior_risk = learned
+    feature_risk = learned
     save_model()
 
-    print(f"Behavioral features learned: {len(behavior_risk)}")
+    print(f"Behavioral features learned: {len(feature_risk)}")
 
 
-# ---------- Android Analysis ----------
+def load_or_train():
+    global feature_risk
+    if os.path.exists(MODEL_FILE):
+        load_model()
+    else:
+        train_from_csv(CSV_PATH)
+
+
+# ================= ANALYSIS =================
 
 def analyze_permissions(android_permissions):
-    score = 0
-    flags = []
+    global feature_risk
+
+    score = 0.0
+    pii_detected = set()
+    sensitive_detected = set()
+    flags = set()
 
     for perm in android_permissions:
         key = perm.split(".")[-1].upper()
 
-        if key in BASE_PERMISSION_RISK:
-            score += BASE_PERMISSION_RISK[key]
-            flags.append(key)
+        for feature, data in feature_risk.items():
+            if semantic_match(key, feature):
+                score += data["risk"]
+                flags.add(feature)
 
-        if key in permission_risk:
-            score += permission_risk[key]
+                if data["type"] == "PII":
+                    pii_detected.add(key)
+                elif data["type"] == "SENSITIVE":
+                    sensitive_detected.add(key)
 
-    if score > 50:
+    # Normalize score to 0–100 scale
+    normalized_score = min(100, round(score / 10, 2))
+
+    if normalized_score >= 70:
         level = "DANGEROUS"
-    elif score > 20:
+        leak_type = "High Risk PII / Sensitive Data Exfiltration"
+    elif normalized_score >= 30:
         level = "SUSPICIOUS"
+        leak_type = "Moderate Sensitive Data Exposure"
     else:
         level = "SAFE"
+        leak_type = "Low Risk / No Critical Leak"
 
     return {
         "level": level,
-        "score": score,
-        "flags": flags
+        "score": normalized_score,
+        "flags": sorted(flags),
+        "leak_type": leak_type,
+        "pii_detected": sorted(pii_detected),
+        "sensitive_detected": sorted(sensitive_detected)
     }
 
 
-# ---------- Adaptive Learning ----------
+# ================= ADAPTIVE LEARNING =================
 
 def adaptive_update(android_permissions, is_malware):
-    delta = 3 if is_malware else -1
+    global feature_risk
+
+    delta = 5 if is_malware else -2
 
     for perm in android_permissions:
         key = perm.split(".")[-1].upper()
-        permission_risk[key] = permission_risk.get(key, 0) + delta
+
+        for feature in feature_risk:
+            if semantic_match(key, feature):
+                feature_risk[feature]["risk"] = max(
+                    0, feature_risk[feature]["risk"] + delta
+                )
 
     save_model()
