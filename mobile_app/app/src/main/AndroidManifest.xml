@@ -27,5 +27,12 @@
             </intent-filter>
 
         </activity>
+
+        <activity
+            android:name=".ScanHistoryActivity"
+            android:exported="false"
+            android:label="Scan History" />
+
     </application>
+
 </manifest>
