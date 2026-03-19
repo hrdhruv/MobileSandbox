@@ -1,16 +1,28 @@
 R_DEF: Internal format may change without notice
 local
 drawable badge_bg
-id btnHistory
-id btnScan
+drawable bg_gradient_dark
+id bottomNavigationView
+id btnScanFab
+id emptyState
+id lottieScan
+id nav_history
+id nav_scan
 id resultsContainer
 id rvHistory
-id scanProgress
+id stickyHeader
+id tvHistoryTitle
 id tvPackage
 id tvRiskLevel
+id tvScanTitle
 id tvScore
 id tvTimestamp
+id tvTotalScans
+id viewHistory
+id viewScan
 layout activity_main
 layout activity_scan_history
 layout item_scan_history
+menu bottom_nav_menu
+style Theme.MobileSandbox
 xml network_security_config

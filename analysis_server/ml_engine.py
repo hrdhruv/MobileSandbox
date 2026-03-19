@@ -141,6 +141,8 @@ def _perm_short_key(full_perm):
 
 # ================= BAYESIAN UPDATER =================
 
+_bayes_cache = {}
+
 def get_bayesian_risk(perm_key: str) -> float:
     """
     Beta-Binomial conjugate posterior risk for a single permission.
@@ -157,11 +159,17 @@ def get_bayesian_risk(perm_key: str) -> float:
     stats = db_manager.get_feedback_stats()
     perm_stat = stats.get(perm_key, {"malware": 0, "safe": 0})
 
+    cache_key = (perm_key, perm_stat["malware"], perm_stat["safe"])
+    if cache_key in _bayes_cache:
+        return _bayes_cache[cache_key]
+
     alpha = BETA_ALPHA_0 + perm_stat["malware"]
     beta  = BETA_BETA_0  + perm_stat["safe"]
 
     posterior_mean = alpha / (alpha + beta)   # ∈ [0, 1]
-    return posterior_mean * 10.0              # scale to [0, 10]
+    result = posterior_mean * 10.0            # scale to [0, 10]
+    _bayes_cache[cache_key] = result
+    return result
 
 
 # ================= MODEL PERSISTENCE =================
@@ -485,17 +493,17 @@ def _build_feature_vector(android_permissions):
 
 def _classify_level(score):
     """
-    4-tier classification:
-      ≥ 70  → DANGEROUS
-      ≥ 50  → SUSPICIOUS
-      ≥ 30  → HANDLE_WITH_CARE
-      < 30  → SAFE
+    4-tier classification (0-100 scale):
+      ≥ 75.0  → DANGEROUS
+      ≥ 50.0  → SUSPICIOUS
+      ≥ 25.0  → HANDLE_WITH_CARE
+      < 25.0  → SAFE
     """
-    if score >= 70:
+    if score >= 75.0:
         return "DANGEROUS", "High Risk PII / Sensitive Data Exfiltration"
-    elif score >= 50:
+    elif score >= 50.0:
         return "SUSPICIOUS", "Moderate Sensitive Data Exposure"
-    elif score >= 30:
+    elif score >= 25.0:
         return "HANDLE_WITH_CARE", "Potential Privacy Concerns — Not Fully Safe"
     else:
         return "SAFE", "Low Risk / No Critical Leak"
@@ -515,12 +523,12 @@ def analyze_permissions(android_permissions):
     flags = set()
 
     # ── Signal A: per-permission scoring ──
-    perm_risk_sum = 0.0
+    risks = []
     for perm in android_permissions:
         key = _perm_short_key(perm)
         cat = classify_permission(key)
         risk = _get_permission_risk(key)
-        perm_risk_sum += risk
+        risks.append(risk)
 
         if cat == "PII":
             pii_detected.add(key)
@@ -529,26 +537,24 @@ def analyze_permissions(android_permissions):
             sensitive_detected.add(key)
             flags.add(key)
 
-    n_perms = len(android_permissions)
+    top_risks = sorted(risks, reverse=True)[:15]
+    n_perms = len(top_risks)
     if n_perms == 0:
         perm_score = 0.0
     else:
-        avg_risk = perm_risk_sum / n_perms
-        count_factor = min(1.0, n_perms / 15.0)
-        perm_score = (avg_risk * 10.0) * (0.6 + 0.4 * count_factor)
-    perm_score = min(100.0, max(0.0, perm_score))
+        raw_score = sum(top_risks) / n_perms
+        amplified = raw_score ** 1.6
+        final_static = min(amplified * (10 / (10 ** 1.6)), 10.0)
+        perm_score = final_static
 
     # ── Signal B: ML model probability-weighted score ──
-    ml_score = 50.0  # neutral default
+    ml_score = 5.0  # neutral default
     if ml_model_ready and ml_model is not None and len(feature_columns) > 0:
         x = _build_feature_vector(android_permissions).reshape(1, -1)
         proba = ml_model.predict_proba(x)[0]
-        classes = ml_model.classes_
-        ml_score = sum(
-            proba[i] * CLASS_WEIGHTS.get(int(c), 50.0)
-            for i, c in enumerate(classes)
-        )
-        ml_score = min(100.0, max(0.0, ml_score))
+        class_weights = [0, 2.5, 5.0, 7.5, 10.0]
+        ml_score = sum(p * w for p, w in zip(proba, class_weights))
+        ml_score = min(10.0, max(0.0, ml_score))
 
     # ── Signal C: Beta-Binomial Bayesian signal ──
     # Average posterior risk across all permissions in this app
@@ -558,10 +564,10 @@ def analyze_permissions(android_permissions):
         bayesian_risks.append(get_bayesian_risk(key))   # returns 0-10
 
     if bayesian_risks:
-        avg_bayes = sum(bayesian_risks) / len(bayesian_risks)
-        bayes_score = avg_bayes * 10.0   # scale 0-10 → 0-100
+        top_bayes = sorted(bayesian_risks, reverse=True)[:15]
+        bayes_score = sum(top_bayes) / len(top_bayes)
     else:
-        bayes_score = 50.0
+        bayes_score = 5.0
 
     # ── Weighted blend ──
     final_score = (
@@ -569,13 +575,14 @@ def analyze_permissions(android_permissions):
         0.25 * ml_score +
         0.15 * bayes_score
     )
-    final_score = min(100.0, max(0.0, final_score))
-    level, leak_type = _classify_level(final_score)
+    final_score = min(10.0, max(0.0, final_score))
+    final_score_scaled = round(final_score * 10.0, 1) # scale to 0-100
+    level, leak_type = _classify_level(final_score_scaled)
 
     return {
         "level": level,
-        "score": final_score,
-        "score_int": int(round(final_score)),
+        "score": final_score_scaled,
+        "score_int": int(round(final_score_scaled)),
         "flags": sorted(flags),
         "leak_type": leak_type,
         "pii_detected": sorted(pii_detected),

@@ -15,7 +15,7 @@
         android:usesCleartextTraffic="true"
         android:allowBackup="true"
         android:label="Data Leakage Sandbox"
-        android:theme="@style/Theme.AppCompat.Light.DarkActionBar">
+        android:theme="@style/Theme.MobileSandbox">
 
         <activity
             android:name=".MainActivity"

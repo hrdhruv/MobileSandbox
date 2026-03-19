@@ -2,45 +2,84 @@ package com.example.dataleakage
 
 import android.graphics.Color
 import android.os.Bundle
+import android.view.LayoutInflater
 import android.view.View
-import android.widget.Button
+import android.view.ViewGroup
 import android.widget.LinearLayout
-import android.widget.ProgressBar
 import android.widget.TextView
+import android.widget.ImageView
 import android.widget.Toast
 import androidx.appcompat.app.AppCompatActivity
-import androidx.cardview.widget.CardView
+import androidx.constraintlayout.widget.ConstraintLayout
+import androidx.recyclerview.widget.LinearLayoutManager
+import androidx.recyclerview.widget.RecyclerView
 import androidx.lifecycle.lifecycleScope
 import com.example.dataleakage.api.AnalysisRequest
 import com.example.dataleakage.api.FeedbackRequest
 import com.example.dataleakage.api.RetrofitClient
+import com.example.dataleakage.api.ScanRecord
 import com.example.dataleakage.ui.SpeedometerView
+import com.google.android.material.bottomnavigation.BottomNavigationView
+import com.google.android.material.button.MaterialButton
+import com.google.android.material.card.MaterialCardView
+import com.google.android.material.imageview.ShapeableImageView
+import com.google.android.material.snackbar.Snackbar
+import com.airbnb.lottie.LottieAnimationView
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 class MainActivity : AppCompatActivity() {
 
+    private lateinit var viewScan: ConstraintLayout
+    private lateinit var viewHistory: ConstraintLayout
+    private lateinit var container: LinearLayout
+    private lateinit var lottieScan: LottieAnimationView
+    private lateinit var btnScanFab: ShapeableImageView
+    private lateinit var rvHistory: RecyclerView
+    private lateinit var tvTotalScans: TextView
+    private lateinit var emptyState: LinearLayout
+    private lateinit var scanner: AppScanner
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_main)
 
-        val btnScan    = findViewById<Button>(R.id.btnScan)
-        val btnHistory = findViewById<Button>(R.id.btnHistory)
-        val container  = findViewById<LinearLayout>(R.id.resultsContainer)
-        val progress   = findViewById<ProgressBar>(R.id.scanProgress)
-        val scanner    = AppScanner(this)
+        viewScan = findViewById(R.id.viewScan)
+        viewHistory = findViewById(R.id.viewHistory)
+        container = findViewById(R.id.resultsContainer)
+        lottieScan = findViewById(R.id.lottieScan)
+        btnScanFab = findViewById(R.id.btnScanFab)
+        rvHistory = findViewById(R.id.rvHistory)
+        tvTotalScans = findViewById(R.id.tvTotalScans)
+        emptyState = findViewById(R.id.emptyState)
+        val bottomNav = findViewById<BottomNavigationView>(R.id.bottomNavigationView)
+        scanner = AppScanner(this)
 
-        // ── Navigate to Scan History ──
-        btnHistory.setOnClickListener {
-            startActivity(android.content.Intent(this, ScanHistoryActivity::class.java))
+        rvHistory.layoutManager = LinearLayoutManager(this)
+
+        bottomNav.setOnItemSelectedListener { item ->
+            when (item.itemId) {
+                R.id.nav_scan -> {
+                    viewScan.visibility = View.VISIBLE
+                    viewHistory.visibility = View.GONE
+                    true
+                }
+                R.id.nav_history -> {
+                    viewScan.visibility = View.GONE
+                    viewHistory.visibility = View.VISIBLE
+                    loadHistory()
+                    true
+                }
+                else -> false
+            }
         }
 
-        // ── Scan apps ──
-        btnScan.setOnClickListener {
+        btnScanFab.setOnClickListener {
             container.removeAllViews()
-            btnScan.isEnabled = false
-            progress.visibility = View.VISIBLE
+            btnScanFab.isEnabled = false
+            btnScanFab.alpha = 0.5f
+            lottieScan.visibility = View.VISIBLE
 
             lifecycleScope.launch {
                 val apps = withContext(Dispatchers.IO) {
@@ -58,156 +97,200 @@ class MainActivity : AppCompatActivity() {
                             )
                         }
                         addAppResult(container, response.app, response.risk_level,
-                            response.score, response.pii_detected,
+                            response.score, response.score_min, response.score_max, response.pii_detected,
                             response.sensitive_detected, permissions)
                     } catch (e: Exception) {
                         addError(container, app.packageName)
                     }
                 }
 
-                progress.visibility = View.GONE
-                btnScan.isEnabled = true
+                lottieScan.visibility = View.GONE
+                btnScanFab.isEnabled = true
+                btnScanFab.alpha = 1.0f
             }
         }
     }
 
-    // ─────────────────────────────────────────
-    //  Render one app result card
-    // ─────────────────────────────────────────
+    private fun loadHistory() {
+        lifecycleScope.launch {
+            try {
+                val response = withContext(Dispatchers.IO) {
+                    RetrofitClient.api.getScanHistory()
+                }
+                tvTotalScans.text = "Total Scans: ${response.scans.size}"
+                if (response.scans.isEmpty()) {
+                    emptyState.visibility = View.VISIBLE
+                    rvHistory.visibility = View.GONE
+                } else {
+                    emptyState.visibility = View.GONE
+                    rvHistory.visibility = View.VISIBLE
+                    rvHistory.adapter = ScanHistoryAdapter(response.scans)
+                    
+                    // Add fade-in entrance animation
+                    rvHistory.layoutAnimation = android.view.animation.LayoutAnimationController(
+                        android.view.animation.AnimationUtils.loadAnimation(this@MainActivity, android.R.anim.fade_in)
+                    )
+                }
+            } catch (e: Exception) {
+                Toast.makeText(this@MainActivity,
+                    "Failed to load history: ${e.message}", Toast.LENGTH_LONG).show()
+            }
+        }
+    }
 
     private fun addAppResult(
         container: LinearLayout,
         appName: String,
         level: String,
         score: Int,
+        scoreMin: Int,
+        scoreMax: Int,
         pii: List<String>,
         sensitive: List<String>,
         permissions: List<String>
     ) {
-        // ── CardView wrapper ──
-        val cardView = CardView(this).apply {
-            radius = 12f
-            cardElevation = 8f
+        val cardView = MaterialCardView(this).apply {
+            radius = 48f
+            cardElevation = 18f
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT
-            ).also { it.setMargins(0, 0, 0, 20) }
+            ).also { it.setMargins(0, 0, 0, 48) }
         }
+
+        val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+
+        val levelColor = when (level) {
+            "DANGEROUS"        -> Color.parseColor("#E74C3C")
+            "SUSPICIOUS"       -> Color.parseColor("#E67E22")
+            "HANDLE_WITH_CARE" -> Color.parseColor("#F39C12")
+            else               -> Color.parseColor("#2ECC71")
+        }
+
+        val stripe = View(this).apply {
+            setBackgroundColor(levelColor)
+            layoutParams = LinearLayout.LayoutParams(12, LinearLayout.LayoutParams.MATCH_PARENT)
+        }
+        row.addView(stripe)
 
         val inner = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(28, 24, 28, 24)
+            setPadding(48, 36, 48, 36)
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
         }
 
-        // ── Risk level → color + emoji ──
-        val (emoji, levelColor, displayLevel) = when (level) {
-            "DANGEROUS"        -> Triple("🔴", Color.parseColor("#D32F2F"), "DANGEROUS")
-            "SUSPICIOUS"       -> Triple("🟡", Color.parseColor("#F57F17"), "SUSPICIOUS")
-            "HANDLE_WITH_CARE" -> Triple("🟠", Color.parseColor("#E65100"), "HANDLE WITH CARE")
-            else               -> Triple("🟢", Color.parseColor("#2E7D32"), "SAFE")
-        }
+        val displayLevel = level.replace("_", " ")
 
         val title = TextView(this).apply {
-            text = "📦 $appName"
-            textSize = 15f
+            text = appName
+            setTextAppearance(android.R.style.TextAppearance_Material_Title) // TitleMedium equivalent or Material Components Title
+            textSize = 20f
             setTextColor(Color.parseColor("#1A237E"))
             typeface = android.graphics.Typeface.DEFAULT_BOLD
         }
 
-        val riskBadge = TextView(this).apply {
-            text = "$emoji  $displayLevel"
-            textSize = 13f
-            setTextColor(Color.WHITE)
-            setBackgroundColor(levelColor)
-            setPadding(16, 8, 16, 8)
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            ).also { it.topMargin = 6 }
+        val badgeAndScore = LinearLayout(this).apply { 
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(0, 16, 0, 16)
         }
-
+        
+        val riskBadge = TextView(this).apply {
+            text = displayLevel
+            textSize = 14f
+            typeface = android.graphics.Typeface.DEFAULT_BOLD
+            setTextColor(levelColor)
+            layoutParams = LinearLayout.LayoutParams(
+                0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f
+            )
+        }
+        
         val scoreLabel = TextView(this).apply {
-            text = "Risk Score: $score / 100"
-            textSize = 13f
+            text = "$scoreMin - $scoreMax / 100"
+            textSize = 28f // large 28sp font
             setTextColor(levelColor)
             typeface = android.graphics.Typeface.DEFAULT_BOLD
-            layoutParams = LinearLayout.LayoutParams(
-                LinearLayout.LayoutParams.WRAP_CONTENT,
-                LinearLayout.LayoutParams.WRAP_CONTENT
-            ).also { it.topMargin = 4 }
         }
+
+        badgeAndScore.addView(riskBadge)
+        badgeAndScore.addView(scoreLabel)
 
         val speedometer = SpeedometerView(this).apply {
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT, 280
             )
-            setScore(score)
+            setScore(score) // Internal expects 0-100 
         }
 
         val piiText = TextView(this).apply {
-            text = "🔵 PII: ${if (pii.isEmpty()) "None" else pii.joinToString(", ")}"
+            text = "PII: ${if (pii.isEmpty()) "None" else pii.joinToString(", ")}"
             textSize = 12f
-            setTextColor(Color.parseColor("#444444"))
+            setTextColor(Color.parseColor("#AAAAAA"))
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).also { it.topMargin = 16 }
         }
 
         val sensitiveText = TextView(this).apply {
-            text = "🟡 Sensitive: ${if (sensitive.isEmpty()) "None" else sensitive.joinToString(", ")}"
+            text = "Sensitive: ${if (sensitive.isEmpty()) "None" else sensitive.joinToString(", ")}"
             textSize = 12f
-            setTextColor(Color.parseColor("#444444"))
+            setTextColor(Color.parseColor("#AAAAAA"))
+            layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).also { it.topMargin = 8 }
         }
 
-        // ── Feedback buttons (standard Button — no Material3 dependency) ──
         val feedbackLayout = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
-            setPadding(0, 12, 0, 0)
+            setPadding(0, 32, 0, 0)
         }
 
-        val btnMarkSafe    = Button(this).apply { text = "✅ Mark Safe" }
-        val btnMarkMalware = Button(this).apply { text = "⚠️ Mark Malware" }
+        val btnMarkSafe = MaterialButton(this, null, com.google.android.material.R.attr.materialButtonOutlinedStyle).apply { 
+            text = "Safe"
+            setIconResource(android.R.drawable.ic_menu_preferences) // basic check mark
+            iconTint = android.content.res.ColorStateList.valueOf(Color.parseColor("#2ECC71"))
+        }
+        
+        val btnMarkMalware = MaterialButton(this, null, com.google.android.material.R.attr.materialButtonOutlinedStyle).apply { 
+            text = "Malware"
+            setIconResource(android.R.drawable.ic_dialog_alert)
+            iconTint = android.content.res.ColorStateList.valueOf(Color.parseColor("#E74C3C"))
+        }
 
-        // Disable both after first tap to prevent double-submit
         val submitFeedback: (Boolean) -> Unit = { isMalware ->
-            btnMarkSafe.isEnabled    = false
+            btnMarkSafe.isEnabled = false
             btnMarkMalware.isEnabled = false
-            sendFeedback(appName, permissions, isMalware)
+            btnMarkSafe.alpha = 0.4f
+            btnMarkMalware.alpha = 0.4f
+            sendFeedback(appName, permissions, isMalware, cardView)
         }
-        btnMarkSafe.setOnClickListener    { submitFeedback(false) }
-        btnMarkMalware.setOnClickListener { submitFeedback(true)  }
+        btnMarkSafe.setOnClickListener { submitFeedback(false) }
+        btnMarkMalware.setOnClickListener { submitFeedback(true) }
 
         feedbackLayout.addView(btnMarkSafe, LinearLayout.LayoutParams(
-            0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+            0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f).also { it.rightMargin = 16 })
         feedbackLayout.addView(btnMarkMalware, LinearLayout.LayoutParams(
             0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
 
         inner.addView(title)
-        inner.addView(riskBadge)
-        inner.addView(scoreLabel)
+        inner.addView(badgeAndScore)
         inner.addView(speedometer)
         inner.addView(piiText)
         inner.addView(sensitiveText)
         inner.addView(feedbackLayout)
-        cardView.addView(inner)
+        
+        row.addView(inner)
+        cardView.addView(row)
         container.addView(cardView)
     }
 
-    // ─────────────────────────────────────────
-    //  Send feedback to server
-    // ─────────────────────────────────────────
-
-    private fun sendFeedback(packageName: String, permissions: List<String>,
-                             isMalware: Boolean) {
+    private fun sendFeedback(packageName: String, permissions: List<String>, isMalware: Boolean, view: View) {
         lifecycleScope.launch {
             try {
                 withContext(Dispatchers.IO) {
-                    RetrofitClient.api.sendFeedback(
-                        FeedbackRequest(packageName, permissions, isMalware)
-                    )
+                    RetrofitClient.api.sendFeedback(FeedbackRequest(packageName, permissions, isMalware))
                 }
-                Toast.makeText(this@MainActivity,
-                    "Feedback submitted for $packageName", Toast.LENGTH_SHORT).show()
+                Snackbar.make(view, "Feedback recorded. Thank you.", Snackbar.LENGTH_SHORT).show()
             } catch (e: Exception) {
-                Toast.makeText(this@MainActivity,
-                    "Failed to submit feedback", Toast.LENGTH_SHORT).show()
+                Snackbar.make(view, "Failed to submit feedback", Snackbar.LENGTH_SHORT).show()
             }
         }
     }
@@ -216,6 +299,48 @@ class MainActivity : AppCompatActivity() {
         container.addView(TextView(this).apply {
             text = "❌ Failed to analyze: $appName"
             setPadding(0, 8, 0, 8)
+            setTextColor(Color.WHITE)
         })
+    }
+}
+
+class ScanHistoryAdapter(private val items: List<ScanRecord>) : RecyclerView.Adapter<ScanHistoryAdapter.VH>() {
+    inner class VH(view: View) : RecyclerView.ViewHolder(view) {
+        val tvPackage = view.findViewById<TextView>(R.id.tvPackage)
+        val tvRiskLevel = view.findViewById<TextView>(R.id.tvRiskLevel)
+        val tvScore = view.findViewById<TextView>(R.id.tvScore)
+        val tvTimestamp = view.findViewById<TextView>(R.id.tvTimestamp)
+    }
+
+    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {
+        val v = LayoutInflater.from(parent.context).inflate(R.layout.item_scan_history, parent, false)
+        return VH(v)
+    }
+
+    override fun getItemCount() = items.size
+
+    override fun onBindViewHolder(holder: VH, position: Int) {
+        val item = items[position]
+        holder.tvPackage.text = item.package_name
+        
+        val color = when (item.risk_level) {
+            "DANGEROUS"        -> Color.parseColor("#E74C3C")
+            "SUSPICIOUS"       -> Color.parseColor("#E67E22")
+            "HANDLE_WITH_CARE" -> Color.parseColor("#F39C12")
+            else               -> Color.parseColor("#2ECC71")
+        }
+
+        holder.tvRiskLevel.text = item.risk_level.replace("_", " ")
+        holder.tvRiskLevel.backgroundTintList = android.content.res.ColorStateList.valueOf(color)
+        
+        val rangeMatch = Regex("""\(Range: (\d+)-(\d+)\)""").find(item.leak_type ?: "")
+        if (rangeMatch != null) {
+            holder.tvScore.text = "Score: ${rangeMatch.groupValues[1]} - ${rangeMatch.groupValues[2]}"
+        } else {
+            holder.tvScore.text = "Score: ${"%.1f".format(item.score * 10.0)}" // Fallback scales old DB rows properly out to 100 
+        }
+
+        val ts = item.timestamp?.take(19)?.replace("T", "  ") ?: ""
+        holder.tvTimestamp.text = ts
     }
 }

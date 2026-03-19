@@ -4,6 +4,11 @@ from typing import Optional, List
 import uvicorn
 import ml_engine
 import db_manager
+import random
+import numpy as np
+
+random.seed(42)
+np.random.seed(42)
 
 app = FastAPI(title="MobileSandbox Analysis Server")
 
@@ -34,27 +39,41 @@ def startup_event():
 
 @app.post("/analyze")
 async def analyze(data: AppData):
-    result = ml_engine.analyze_permissions(data.permissions)
+    scores = []
+    base_result = None
+    
+    for i in range(5):
+        result = ml_engine.analyze_permissions(data.permissions)
+        scores.append(result["score_int"])
+        if i == 0:
+            base_result = result
+            
+    min_score = min(scores)
+    max_score = max(scores)
+    
+    enhanced_leak_type = f"{base_result['leak_type']} (Range: {min_score}-{max_score})"
 
     db_manager.save_scan_result(
         package_name=data.package_name,
-        risk_level=result["level"],
-        score=result["score"],
-        leak_type=result["leak_type"],
-        pii_detected=result["pii_detected"],
-        sensitive_detected=result["sensitive_detected"],
-        detected_threats=result["flags"]
+        risk_level=base_result["level"],
+        score=base_result["score"],
+        leak_type=enhanced_leak_type,
+        pii_detected=base_result["pii_detected"],
+        sensitive_detected=base_result["sensitive_detected"],
+        detected_threats=base_result["flags"]
     )
 
     return {
         "app": data.package_name,
-        "risk_level": result["level"],
-        "score": result["score_int"],
-        "score_precise": round(result["score"], 4),
-        "leak_type": result["leak_type"],
-        "pii_detected": result["pii_detected"],
-        "sensitive_detected": result["sensitive_detected"],
-        "detected_threats": result["flags"]
+        "risk_level": base_result["level"],
+        "score": base_result["score_int"],
+        "score_min": min_score,
+        "score_max": max_score,
+        "score_precise": round(base_result["score"], 4),
+        "leak_type": enhanced_leak_type,
+        "pii_detected": base_result["pii_detected"],
+        "sensitive_detected": base_result["sensitive_detected"],
+        "detected_threats": base_result["flags"]
     }
 
 

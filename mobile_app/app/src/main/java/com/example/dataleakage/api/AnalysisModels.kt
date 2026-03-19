@@ -9,6 +9,8 @@ data class AnalysisResponse(
     val app: String,
     val risk_level: String,
     val score: Int,
+    val score_min: Int,
+    val score_max: Int,
     val score_precise: Double = 0.0,
     val leak_type: String,
     val pii_detected: List<String>,
