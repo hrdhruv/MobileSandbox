@@ -6,7 +6,7 @@ All persistence for signatures.db lives here.
 import sqlite3
 import os
 import json
-from datetime import datetime
+from datetime import datetime, timedelta
 
 DB_PATH = "signatures.db"
 
@@ -17,7 +17,7 @@ def init_db():
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
 
-    # ── Migrate old feedback table if it exists with the wrong schema ──
+    # ── Migrate old feedback table if schema is out of date ──
     c.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='feedback'")
     if c.fetchone():
         c.execute("PRAGMA table_info(feedback)")
@@ -35,11 +35,9 @@ def init_db():
                     timestamp TEXT NOT NULL
                 )
             """)
-            # Copy old rows (fill missing columns with defaults)
             c.execute("""
                 INSERT INTO feedback (package_name, is_malware, permissions, user_notes, timestamp)
-                SELECT package_name, is_malware, '[]', '',
-                       datetime('now') FROM feedback_old
+                SELECT package_name, is_malware, '[]', '', datetime('now') FROM feedback_old
             """)
             c.execute("DROP TABLE feedback_old")
             print("[db_manager] Migration complete.")
@@ -67,6 +65,22 @@ def init_db():
             detected_threats TEXT,
             timestamp TEXT NOT NULL
         )
+    """)
+
+    # ── SQLite VIEW: per-permission feedback aggregates (fast querying) ──
+    c.execute("DROP VIEW IF EXISTS feedback_summary")
+    # Note: SQLite does not support JSON functions universally, so the view
+    # is a lightweight proxy; actual aggregation is done in Python.
+    c.execute("""
+        CREATE VIEW IF NOT EXISTS feedback_summary AS
+        SELECT
+            package_name,
+            SUM(is_malware)          AS malware_count,
+            SUM(1 - is_malware)      AS safe_count,
+            COUNT(*)                 AS total_reports,
+            MAX(timestamp)           AS last_report
+        FROM feedback
+        GROUP BY package_name
     """)
 
     conn.commit()
@@ -106,15 +120,28 @@ def get_all_feedback():
     return [dict(r) for r in rows]
 
 
-def get_feedback_stats():
-    """Aggregate malware/safe counts per permission for adaptive learning."""
+def get_feedback_for_package(package_name: str):
+    """Retrieve all feedback rows for a specific package."""
     conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
     rows = conn.execute(
-        "SELECT permissions, is_malware FROM feedback"
+        "SELECT * FROM feedback WHERE package_name = ? ORDER BY id DESC",
+        (package_name,)
     ).fetchall()
     conn.close()
+    return [dict(r) for r in rows]
 
-    perm_stats = {}  # permission -> {"malware": int, "safe": int}
+
+def get_feedback_stats():
+    """
+    Aggregate malware/safe counts per permission for adaptive learning.
+    Returns: {permission_key: {"malware": int, "safe": int}}
+    """
+    conn = sqlite3.connect(DB_PATH)
+    rows = conn.execute("SELECT permissions, is_malware FROM feedback").fetchall()
+    conn.close()
+
+    perm_stats = {}
     for perms_json, is_mal in rows:
         try:
             perms = json.loads(perms_json) if perms_json else []
@@ -134,10 +161,34 @@ def get_feedback_stats():
 
 # ─────────────── Scan History ───────────────
 
+def is_duplicate_scan(package_name: str, window_minutes: int = 5) -> bool:
+    """
+    Return True if this package was already scanned within the last
+    window_minutes — prevents duplicate DB entries from rapid re-scans.
+    """
+    cutoff = (datetime.utcnow() - timedelta(minutes=window_minutes)).isoformat()
+    conn = sqlite3.connect(DB_PATH)
+    row = conn.execute(
+        """SELECT id FROM scan_history
+           WHERE package_name = ? AND timestamp >= ?
+           ORDER BY id DESC LIMIT 1""",
+        (package_name, cutoff)
+    ).fetchone()
+    conn.close()
+    return row is not None
+
+
 def save_scan_result(package_name: str, risk_level: str, score: float,
                      leak_type: str, pii_detected: list,
                      sensitive_detected: list, detected_threats: list):
-    """Persist an analysis result."""
+    """
+    Persist an analysis result.
+    Skips insertion if the same package was scanned within 5 minutes
+    (deduplication guard).
+    """
+    if is_duplicate_scan(package_name):
+        return  # skip duplicate
+
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute(
@@ -169,3 +220,59 @@ def get_scan_history(limit: int = 50):
     ).fetchall()
     conn.close()
     return [dict(r) for r in rows]
+
+
+# ─────────────── Aggregate Stats ───────────────
+
+def get_aggregate_stats():
+    """
+    Returns a summary dict used by the /stats endpoint:
+      - total_scans
+      - feedback_malware / feedback_safe / feedback_total
+      - top_risky_permissions: top-10 permissions by malware frequency
+      - risk_level_distribution: count per risk level in scan_history
+    """
+    conn = sqlite3.connect(DB_PATH)
+
+    total_scans = conn.execute("SELECT COUNT(*) FROM scan_history").fetchone()[0]
+    fb_mal = conn.execute(
+        "SELECT COUNT(*) FROM feedback WHERE is_malware = 1"
+    ).fetchone()[0]
+    fb_safe = conn.execute(
+        "SELECT COUNT(*) FROM feedback WHERE is_malware = 0"
+    ).fetchone()[0]
+
+    # Risk-level distribution
+    level_rows = conn.execute(
+        "SELECT risk_level, COUNT(*) as cnt FROM scan_history GROUP BY risk_level"
+    ).fetchall()
+    level_dist = {row[0]: row[1] for row in level_rows}
+
+    # Top risky permissions from feedback (malware-labelled rows)
+    mal_rows = conn.execute(
+        "SELECT permissions FROM feedback WHERE is_malware = 1"
+    ).fetchall()
+    conn.close()
+
+    perm_counts = {}
+    for (perms_json,) in mal_rows:
+        try:
+            perms = json.loads(perms_json) if perms_json else []
+        except (json.JSONDecodeError, TypeError):
+            continue
+        for p in perms:
+            key = p.split(".")[-1].upper()
+            perm_counts[key] = perm_counts.get(key, 0) + 1
+
+    top_perms = sorted(perm_counts.items(), key=lambda x: x[1], reverse=True)[:10]
+
+    return {
+        "total_scans": total_scans,
+        "feedback_malware": fb_mal,
+        "feedback_safe": fb_safe,
+        "feedback_total": fb_mal + fb_safe,
+        "risk_level_distribution": level_dist,
+        "top_risky_permissions": [
+            {"permission": p, "malware_reports": c} for p, c in top_perms
+        ]
+    }
