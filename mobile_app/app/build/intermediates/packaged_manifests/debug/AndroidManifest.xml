@@ -39,6 +39,10 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+        <activity
+            android:name="com.example.dataleakage.ScanHistoryActivity"
+            android:exported="false"
+            android:label="Scan History" />
 
         <provider
             android:name="androidx.startup.InitializationProvider"

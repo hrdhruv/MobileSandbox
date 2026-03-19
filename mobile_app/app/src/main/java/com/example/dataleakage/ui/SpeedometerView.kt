@@ -62,7 +62,7 @@ class SpeedometerView @JvmOverloads constructor(
 
         val radius = min(w, h) / 2 - 60
         val centerX = w / 2
-        val centerY = h * 0.85f  // better vertical alignment
+        val centerY = h * 0.85f
 
         val rect = RectF(
             centerX - radius,
@@ -71,19 +71,26 @@ class SpeedometerView @JvmOverloads constructor(
             centerY + radius
         )
 
-        // GREEN ARC (0-30)
+        // 4-segment arc: GREEN (0-30) → ORANGE (30-50) → YELLOW (50-70) → RED (70-100)
+        // Total sweep = 180°. Each unit = 1.8°.
+
+        // GREEN ARC (0–30): 30 units × 1.8° = 54°
         arcPaint.color = Color.parseColor("#4CAF50")
-        canvas.drawArc(rect, 180f, 60f, false, arcPaint)
+        canvas.drawArc(rect, 180f, 54f, false, arcPaint)
 
-        // YELLOW ARC (30-70)
+        // ORANGE ARC (30–50): 20 units × 1.8° = 36°  — HANDLE WITH CARE
+        arcPaint.color = Color.parseColor("#FF9800")
+        canvas.drawArc(rect, 234f, 36f, false, arcPaint)
+
+        // YELLOW ARC (50–70): 20 units × 1.8° = 36°
         arcPaint.color = Color.parseColor("#FFC107")
-        canvas.drawArc(rect, 240f, 60f, false, arcPaint)
+        canvas.drawArc(rect, 270f, 36f, false, arcPaint)
 
-        // RED ARC (70-100)
+        // RED ARC (70–100): 30 units × 1.8° = 54°
         arcPaint.color = Color.parseColor("#F44336")
-        canvas.drawArc(rect, 300f, 60f, false, arcPaint)
+        canvas.drawArc(rect, 306f, 54f, false, arcPaint)
 
-        // Needle angle
+        // Needle angle (maps 0–100 score to 180°–360° sweep)
         val angle = 180 + (animatedScore * 1.8f)
         val rad = Math.toRadians(angle.toDouble())
 

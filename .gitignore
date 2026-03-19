@@ -1,3 +1,5 @@
 analysis_server/venv/
 mobile_app/.gradle/8.9
 mobile_app/local.properties
+.vscode/*
+mobile_app/build/*

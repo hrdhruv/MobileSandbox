@@ -1,14 +1,26 @@
 [
     {
-        "merged": "/home/harsh-d/.gradle/daemon/9.0-milestone-1/com.example.dataleakage.app-merged_res-33:/layout_activity_main.xml.flat",
-        "source": "/home/harsh-d/.gradle/daemon/9.0-milestone-1/com.example.dataleakage.app-main-35:/layout/activity_main.xml"
+        "merged": "C:\\Users\\LENOVO\\.gradle\\daemon\\9.0-milestone-1\\com.example.dataleakage.app-merged_res-34:\\xml_network_security_config.xml.flat",
+        "source": "C:\\Users\\LENOVO\\.gradle\\daemon\\9.0-milestone-1\\com.example.dataleakage.app-main-36:\\xml\\network_security_config.xml"
     },
     {
-        "merged": "com.example.dataleakage.app-merged_res-33:/layout_activity_main.xml.flat",
-        "source": "com.example.dataleakage.app-main-35:/layout/activity_main.xml"
+        "merged": "C:\\Users\\LENOVO\\.gradle\\daemon\\9.0-milestone-1\\com.example.dataleakage.app-merged_res-34:\\layout_activity_main.xml.flat",
+        "source": "C:\\Users\\LENOVO\\.gradle\\daemon\\9.0-milestone-1\\com.example.dataleakage.app-main-36:\\layout\\activity_main.xml"
     },
     {
-        "merged": "/home/harsh-d/.gradle/daemon/9.0-milestone-1/com.example.dataleakage.app-merged_res-33:/xml_network_security_config.xml.flat",
-        "source": "/home/harsh-d/.gradle/daemon/9.0-milestone-1/com.example.dataleakage.app-main-35:/xml/network_security_config.xml"
+        "merged": "C:\\Users\\LENOVO\\.gradle\\daemon\\9.0-milestone-1\\com.example.dataleakage.app-merged_res-34:\\layout_item_scan_history.xml.flat",
+        "source": "C:\\Users\\LENOVO\\.gradle\\daemon\\9.0-milestone-1\\com.example.dataleakage.app-main-36:\\layout\\item_scan_history.xml"
+    },
+    {
+        "merged": "C:\\Users\\LENOVO\\.gradle\\daemon\\9.0-milestone-1\\com.example.dataleakage.app-merged_res-34:\\layout_activity_scan_history.xml.flat",
+        "source": "C:\\Users\\LENOVO\\.gradle\\daemon\\9.0-milestone-1\\com.example.dataleakage.app-main-36:\\layout\\activity_scan_history.xml"
+    },
+    {
+        "merged": "com.example.dataleakage.app-merged_res-34:/layout_activity_main.xml.flat",
+        "source": "com.example.dataleakage.app-main-36:/layout/activity_main.xml"
+    },
+    {
+        "merged": "C:\\Users\\LENOVO\\.gradle\\daemon\\9.0-milestone-1\\com.example.dataleakage.app-merged_res-34:\\drawable_badge_bg.xml.flat",
+        "source": "C:\\Users\\LENOVO\\.gradle\\daemon\\9.0-milestone-1\\com.example.dataleakage.app-main-36:\\drawable\\badge_bg.xml"
     }
 ]

@@ -1,6 +1,16 @@
 R_DEF: Internal format may change without notice
 local
+drawable badge_bg
+id btnHistory
 id btnScan
 id resultsContainer
+id rvHistory
+id scanProgress
+id tvPackage
+id tvRiskLevel
+id tvScore
+id tvTimestamp
 layout activity_main
+layout activity_scan_history
+layout item_scan_history
 xml network_security_config
