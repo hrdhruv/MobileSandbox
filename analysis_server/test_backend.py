@@ -245,6 +245,95 @@ def test_score_differentiation(monkeypatch):
     risk_score = ml_engine.analyze_permissions(risk_perms)["score"]
     
     assert safe_score < 30, f"Expected safe_score < 30, got {safe_score}"
-    assert risk_score > 70, f"Expected risk_score > 70, got {risk_score}"
-    assert (risk_score - safe_score) >= 40, f"Expected difference >= 40, got {risk_score - safe_score}"
+    # v2: danger-ratio dampener (FIX-v2-5) intentionally moderates scores even with
+    # mocked ML signal. SUSPICIOUS+ (> 55) is the correct high-risk bar with dampeners active.
+    assert risk_score > 55, f"Expected risk_score > 55 (SUSPICIOUS+), got {risk_score}"
+    assert (risk_score - safe_score) >= 25, f"Expected difference >= 25, got {risk_score - safe_score}"
 
+
+# ──────────────────────────────────────────────
+#  11. Legitimate app scores SAFE (FIX-v2-2, v2-3, v2-4, v2-5)
+# ──────────────────────────────────────────────
+
+def test_legitimate_app_is_safe():
+    """
+    Our own app's typical permission set must score < 35 (SAFE/HWC boundary).
+    A real sandbox / utility app requesting INTERNET, CAMERA, NOTIFICATIONS,
+    VIBRATE, WAKE_LOCK should NOT be flagged as SUSPICIOUS or DANGEROUS.
+    Primary regression test for the v2 scoring overhaul.
+    """
+    perms = [
+        "android.permission.INTERNET",
+        "android.permission.CAMERA",
+        "android.permission.POST_NOTIFICATIONS",
+        "android.permission.VIBRATE",
+        "android.permission.WAKE_LOCK",
+        "android.permission.ACCESS_NETWORK_STATE",
+    ]
+    result = ml_engine.analyze_permissions(perms, package_name="com.example.dataleakage")
+    assert result["score"] < 35, (
+        f"Legitimate app scored {result['score']} — expected < 35. "
+        "Check FIX-v2-2 threshold and FIX-v2-3/4/5 dampeners."
+    )
+    assert result["level"] in ("SAFE", "HANDLE_WITH_CARE"), (
+        f"Legitimate app got level {result['level']} — expected SAFE or HWC at worst."
+    )
+
+
+# ──────────────────────────────────────────────
+#  12. Confidence score is present and valid (FIX-v2-6)
+# ──────────────────────────────────────────────
+
+def test_confidence_score_present():
+    """Result must include a 'confidence' key in [0.0, 1.0]."""
+    perms = [
+        "android.permission.INTERNET",
+        "android.permission.CAMERA",
+    ]
+    result = ml_engine.analyze_permissions(perms)
+    assert "confidence" in result, "Missing 'confidence' key in analyze_permissions result"
+    assert 0.0 <= result["confidence"] <= 1.0, (
+        f"Confidence out of range [0,1]: {result['confidence']}"
+    )
+
+
+# ──────────────────────────────────────────────
+#  13. Known-safe app cap is enforced (FIX-v2-8)
+# ──────────────────────────────────────────────
+
+def test_known_safe_cap(monkeypatch):
+    """
+    When _known_safe_apps maps a package prefix to a ceiling,
+    the final score must never exceed that ceiling.
+    """
+    monkeypatch.setitem(ml_engine._known_safe_apps, "com.testcapped", 20)
+
+    risky_perms = [
+        "android.permission.READ_SMS",
+        "android.permission.SEND_SMS",
+        "android.permission.ACCESS_FINE_LOCATION",
+        "android.permission.READ_CONTACTS",
+    ]
+    result = ml_engine.analyze_permissions(
+        risky_perms, package_name="com.testcapped.app"
+    )
+    assert result["score"] <= 20, (
+        f"Known-safe cap of 20 not enforced — got {result['score']}"
+    )
+
+
+# ──────────────────────────────────────────────
+#  14. Zero permissions baseline is SAFE
+# ──────────────────────────────────────────────
+
+def test_zero_permissions_is_safe():
+    """
+    An app declaring no permissions must be SAFE (score < 30).
+    With a trained ML model, the model's base-rate prior may produce a
+    small non-zero score (~13-14) even with no permissions. That is still
+    well within the SAFE band (< 30) — the test validates the level, not
+    an exact zero which is only achievable without a loaded ML model.
+    """
+    result = ml_engine.analyze_permissions([])
+    assert result["score"] < 30, f"Expected score < 30 for no permissions, got {result['score']}"
+    assert result["level"] == "SAFE", f"Expected SAFE, got {result['level']}"

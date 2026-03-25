@@ -63,9 +63,17 @@ def init_db():
             pii_detected TEXT,
             sensitive_detected TEXT,
             detected_threats TEXT,
+            confidence REAL DEFAULT 1.0,
             timestamp TEXT NOT NULL
         )
     """)
+
+    # ── Migrate scan_history: add confidence column if missing ──
+    c.execute("PRAGMA table_info(scan_history)")
+    scan_cols = {row[1] for row in c.fetchall()}
+    if "confidence" not in scan_cols:
+        c.execute("ALTER TABLE scan_history ADD COLUMN confidence REAL DEFAULT 1.0")
+        print("[db_manager] Migrated scan_history: added confidence column.")
 
     # ── SQLite VIEW: per-permission feedback aggregates (fast querying) ──
     c.execute("DROP VIEW IF EXISTS feedback_summary")
@@ -180,11 +188,13 @@ def is_duplicate_scan(package_name: str, window_minutes: int = 5) -> bool:
 
 def save_scan_result(package_name: str, risk_level: str, score: float,
                      leak_type: str, pii_detected: list,
-                     sensitive_detected: list, detected_threats: list):
+                     sensitive_detected: list, detected_threats: list,
+                     confidence: float = 1.0):
     """
     Persist an analysis result.
     Skips insertion if the same package was scanned within 5 minutes
     (deduplication guard).
+    confidence: [0–1] signal-agreement score from ml_engine (FIX-v2-6).
     """
     if is_duplicate_scan(package_name):
         return  # skip duplicate
@@ -194,8 +204,9 @@ def save_scan_result(package_name: str, risk_level: str, score: float,
     c.execute(
         """INSERT INTO scan_history
            (package_name, risk_level, score, leak_type,
-            pii_detected, sensitive_detected, detected_threats, timestamp)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+            pii_detected, sensitive_detected, detected_threats,
+            confidence, timestamp)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (
             package_name,
             risk_level,
@@ -204,6 +215,7 @@ def save_scan_result(package_name: str, risk_level: str, score: float,
             json.dumps(pii_detected),
             json.dumps(sensitive_detected),
             json.dumps(detected_threats),
+            confidence,
             datetime.utcnow().isoformat()
         )
     )

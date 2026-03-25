@@ -85,7 +85,6 @@ class MainActivity : AppCompatActivity() {
                 val apps = withContext(Dispatchers.IO) {
                     scanner.getInstalledApps()
                         .filter { scanner.getPermissions(it.packageName).isNotEmpty() }
-                        .take(5)
                 }
 
                 for (app in apps) {

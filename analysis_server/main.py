@@ -2,6 +2,7 @@ from fastapi import FastAPI, BackgroundTasks
 from pydantic import BaseModel
 from typing import Optional, List
 import uvicorn
+import statistics
 import ml_engine
 import db_manager
 import random
@@ -39,19 +40,35 @@ def startup_event():
 
 @app.post("/analyze")
 async def analyze(data: AppData):
-    scores = []
-    base_result = None
-    
-    for i in range(5):
-        result = ml_engine.analyze_permissions(data.permissions)
-        scores.append(result["score_int"])
-        if i == 0:
-            base_result = result
-            
+    """
+    Analyse an app's permissions and return a risk score.
+
+    Multi-scan: runs the analysis 5 times and uses the MEDIAN score as the
+    authoritative result (more robust than single-run; eliminates outliers).
+    Min/max range is still reported for display alongside the stable median.
+
+    Returns 'confidence' [0–1]: how much the three internal signals agree.
+    High confidence → the verdict is reliable.
+    Low confidence  → signals are mixed; treat result with more caution.
+    """
+    results = []
+    for _ in range(5):
+        r = ml_engine.analyze_permissions(data.permissions, package_name=data.package_name)
+        results.append(r)
+
+    scores = [r["score_int"] for r in results]
     min_score = min(scores)
     max_score = max(scores)
-    
-    enhanced_leak_type = f"{base_result['leak_type']} (Range: {min_score}-{max_score})"
+
+    # Use median for stability — eliminates stochastic outliers
+    median_score = int(round(statistics.median(scores)))
+
+    # Pick the result closest to the median as the base
+    base_result = min(results, key=lambda r: abs(r["score_int"] - median_score))
+
+    enhanced_leak_type = (
+        f"{base_result['leak_type']} (Range: {min_score}–{max_score})"
+    )
 
     db_manager.save_scan_result(
         package_name=data.package_name,
@@ -60,20 +77,22 @@ async def analyze(data: AppData):
         leak_type=enhanced_leak_type,
         pii_detected=base_result["pii_detected"],
         sensitive_detected=base_result["sensitive_detected"],
-        detected_threats=base_result["flags"]
+        detected_threats=base_result["flags"],
+        confidence=base_result.get("confidence", 1.0),
     )
 
     return {
         "app": data.package_name,
         "risk_level": base_result["level"],
-        "score": base_result["score_int"],
+        "score": median_score,
         "score_min": min_score,
         "score_max": max_score,
         "score_precise": round(base_result["score"], 4),
         "leak_type": enhanced_leak_type,
         "pii_detected": base_result["pii_detected"],
         "sensitive_detected": base_result["sensitive_detected"],
-        "detected_threats": base_result["flags"]
+        "detected_threats": base_result["flags"],
+        "confidence": base_result.get("confidence", 1.0),
     }
 
 
@@ -115,6 +134,44 @@ async def stats():
       - top_10 riskiest permissions observed in malware-labelled feedback
     """
     return db_manager.get_aggregate_stats()
+
+
+# ─────────────── Calibrate Endpoint ───────────────
+
+@app.get("/calibrate")
+async def calibrate():
+    """
+    FIX-v2: Returns current scoring configuration so clients can display
+    threshold information and understand the scoring model's parameters.
+    """
+    return {
+        "thresholds": {
+            "SAFE": "< 30",
+            "HANDLE_WITH_CARE": "30 – 55",
+            "SUSPICIOUS": "55 – 75",
+            "DANGEROUS": "≥ 75",
+        },
+        "bayesian_prior": {
+            "alpha_0": ml_engine.BETA_ALPHA_0,
+            "beta_0": ml_engine.BETA_BETA_0,
+            "prior_mean_scaled": round(
+                ml_engine.BETA_ALPHA_0 /
+                (ml_engine.BETA_ALPHA_0 + ml_engine.BETA_BETA_0) * 10, 2
+            ),
+            "description": "Safe-biased. New apps start at low risk until evidence says otherwise.",
+        },
+        "auto_retrain": {
+            "every_n_samples": ml_engine.AUTO_RETRAIN_EVERY,
+            "min_malware_samples": ml_engine.MIN_RETRAIN_MALWARE,
+            "min_safe_samples": ml_engine.MIN_RETRAIN_SAFE,
+        },
+        "signal_weights": {
+            "signal_a_static": "55% (ML present) / 70% (ML absent)",
+            "signal_b_ml": "30% (ML present) / 0% (ML absent)",
+            "signal_c_bayesian": "15% (ML present) / 30% (ML absent)",
+        },
+        "known_safe_apps": ml_engine._known_safe_apps,
+    }
 
 
 # ─────────────── Retrain Endpoint ───────────────
