@@ -1,8 +1,10 @@
 R_DEF: Internal format may change without notice
 local
+color white
 drawable badge_bg
 drawable bg_gradient_dark
 id bottomNavigationView
+id btnPreInstallApk
 id btnScanFab
 id emptyState
 id lottieScan
@@ -25,4 +27,5 @@ layout activity_scan_history
 layout item_scan_history
 menu bottom_nav_menu
 style Theme.MobileSandbox
+xml file_paths
 xml network_security_config

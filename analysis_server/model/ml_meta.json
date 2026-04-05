@@ -478,8 +478,8 @@
     4,
     5
   ],
-  "train_accuracy": 0.997,
-  "val_accuracy": 0.942,
+  "train_accuracy": 0.9941,
+  "val_accuracy": 0.9371,
   "n_features": 470,
-  "n_samples": 11598
+  "n_samples": 11647
 }

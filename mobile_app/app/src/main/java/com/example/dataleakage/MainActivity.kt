@@ -1,15 +1,17 @@
 package com.example.dataleakage
 
+import android.content.Intent
 import android.graphics.Color
+import android.net.Uri
 import android.os.Bundle
-import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
 import android.widget.TextView
-import android.widget.ImageView
 import android.widget.Toast
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
+import androidx.core.content.FileProvider
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -28,8 +30,15 @@ import com.airbnb.lottie.LottieAnimationView
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.io.File
 
 class MainActivity : AppCompatActivity() {
+
+    private val pickApkLauncher = registerForActivityResult(
+        ActivityResultContracts.OpenDocument()
+    ) { uri: Uri? ->
+        if (uri != null) processPickedApk(uri)
+    }
 
     private lateinit var viewScan: ConstraintLayout
     private lateinit var viewHistory: ConstraintLayout
@@ -57,6 +66,11 @@ class MainActivity : AppCompatActivity() {
         scanner = AppScanner(this)
 
         rvHistory.layoutManager = LinearLayoutManager(this)
+
+        findViewById<com.google.android.material.button.MaterialButton>(R.id.btnPreInstallApk)
+            .setOnClickListener {
+                pickApkLauncher.launch(arrayOf("application/vnd.android.package-archive"))
+            }
 
         bottomNav.setOnItemSelectedListener { item ->
             when (item.itemId) {
@@ -108,6 +122,54 @@ class MainActivity : AppCompatActivity() {
                 btnScanFab.isEnabled = true
                 btnScanFab.alpha = 1.0f
             }
+        }
+    }
+
+    /**
+     * Stock-Android "pre-install" path: APK is copied to app-private cache only,
+     * permissions are read via [PackageManager.getPackageArchiveInfo], then the user
+     * may open the system installer or delete the staged file.
+     */
+    private fun processPickedApk(uri: Uri) {
+        lifecycleScope.launch {
+            lottieScan.visibility = View.VISIBLE
+            val staged = withContext(Dispatchers.IO) {
+                ApkPreInstallStaging.stageApkFromUri(this@MainActivity, uri)
+            }
+            if (staged == null) {
+                lottieScan.visibility = View.GONE
+                Toast.makeText(
+                    this@MainActivity,
+                    "Could not read APK (try another file source).",
+                    Toast.LENGTH_LONG
+                ).show()
+                return@launch
+            }
+            val pkgInfo = withContext(Dispatchers.IO) {
+                ApkPreInstallStaging.readPackageInfo(this@MainActivity, staged)
+            }
+            if (pkgInfo == null) {
+                ApkPreInstallStaging.deleteStaged(staged)
+                lottieScan.visibility = View.GONE
+                Toast.makeText(this@MainActivity, "Invalid or corrupt APK.", Toast.LENGTH_LONG).show()
+                return@launch
+            }
+            val packageName = pkgInfo.packageName ?: "unknown"
+            val permissions = ApkPreInstallStaging.permissionsList(pkgInfo)
+            try {
+                val response = withContext(Dispatchers.IO) {
+                    RetrofitClient.api.analyzeApp(AnalysisRequest(packageName, permissions))
+                }
+                addPreInstallScanResult(
+                    container, staged, packageName,
+                    response.risk_level, response.score,
+                    response.pii_detected, response.sensitive_detected, permissions
+                )
+            } catch (_: Exception) {
+                ApkPreInstallStaging.deleteStaged(staged)
+                addError(container, packageName)
+            }
+            lottieScan.visibility = View.GONE
         }
     }
 
@@ -282,6 +344,211 @@ class MainActivity : AppCompatActivity() {
         container.addView(cardView)
     }
 
+    private fun addPreInstallScanResult(
+        container: LinearLayout,
+        stagedApk: File,
+        packageName: String,
+        level: String,
+        score: Int,
+        pii: List<String>,
+        sensitive: List<String>,
+        permissions: List<String>
+    ) {
+        val cardView = MaterialCardView(this).apply {
+            radius = 48f
+            cardElevation = 18f
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).also { it.setMargins(0, 0, 0, 48) }
+        }
+
+        val row = LinearLayout(this).apply { orientation = LinearLayout.HORIZONTAL }
+
+        val levelColor = when (level) {
+            "DANGEROUS"        -> Color.parseColor("#E74C3C")
+            "SUSPICIOUS"       -> Color.parseColor("#E67E22")
+            "HANDLE_WITH_CARE" -> Color.parseColor("#F39C12")
+            else               -> Color.parseColor("#2ECC71")
+        }
+
+        val stripe = View(this).apply {
+            setBackgroundColor(levelColor)
+            layoutParams = LinearLayout.LayoutParams(12, LinearLayout.LayoutParams.MATCH_PARENT)
+        }
+        row.addView(stripe)
+
+        val inner = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(48, 36, 48, 36)
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            )
+        }
+
+        val displayLevel = level.replace("_", " ")
+
+        val title = TextView(this).apply {
+            text = packageName
+            setTextAppearance(android.R.style.TextAppearance_Material_Title)
+            textSize = 20f
+            setTextColor(Color.parseColor("#1A237E"))
+            typeface = android.graphics.Typeface.DEFAULT_BOLD
+        }
+
+        val sandboxHint = TextView(this).apply {
+            text = "Pre-install scan — APK staged in app sandbox only (not installed)."
+            textSize = 12f
+            setTextColor(Color.parseColor("#5C6BC0"))
+            setPadding(0, 8, 0, 0)
+        }
+
+        val badgeAndScore = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(0, 16, 0, 16)
+        }
+
+        val riskBadge = TextView(this).apply {
+            text = displayLevel
+            textSize = 14f
+            typeface = android.graphics.Typeface.DEFAULT_BOLD
+            setTextColor(levelColor)
+            layoutParams = LinearLayout.LayoutParams(
+                0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f
+            )
+        }
+
+        val scoreLabel = TextView(this).apply {
+            text = "Risk: $score / 100"
+            textSize = 28f
+            setTextColor(levelColor)
+            typeface = android.graphics.Typeface.DEFAULT_BOLD
+        }
+
+        badgeAndScore.addView(riskBadge)
+        badgeAndScore.addView(scoreLabel)
+
+        val speedometer = SpeedometerView(this).apply {
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, 280
+            )
+            setScore(score)
+        }
+
+        val piiText = TextView(this).apply {
+            text = "PII: ${if (pii.isEmpty()) "None" else pii.joinToString(", ")}"
+            textSize = 12f
+            setTextColor(Color.parseColor("#AAAAAA"))
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).also { it.topMargin = 16 }
+        }
+
+        val sensitiveText = TextView(this).apply {
+            text = "Sensitive: ${if (sensitive.isEmpty()) "None" else sensitive.joinToString(", ")}"
+            textSize = 12f
+            setTextColor(Color.parseColor("#AAAAAA"))
+            layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                LinearLayout.LayoutParams.WRAP_CONTENT
+            ).also { it.topMargin = 8 }
+        }
+
+        val decisionRow = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(0, 32, 0, 0)
+        }
+
+        val btnInstall = MaterialButton(this).apply {
+            text = "Install to device"
+            setBackgroundColor(Color.parseColor("#2ECC71"))
+        }
+        val btnReject = MaterialButton(this, null, com.google.android.material.R.attr.materialButtonOutlinedStyle).apply {
+            text = "Reject & delete"
+            setStrokeColor(android.content.res.ColorStateList.valueOf(Color.parseColor("#E74C3C")))
+        }
+
+        fun removeCard() {
+            (cardView.parent as? ViewGroup)?.removeView(cardView)
+        }
+
+        btnInstall.setOnClickListener {
+            try {
+                val contentUri = FileProvider.getUriForFile(
+                    this,
+                    "${BuildConfig.APPLICATION_ID}.fileprovider",
+                    stagedApk
+                )
+                val intent = Intent(Intent.ACTION_INSTALL_PACKAGE).apply {
+                    data = contentUri
+                    flags = Intent.FLAG_GRANT_READ_URI_PERMISSION
+                }
+                startActivity(intent)
+            } catch (e: Exception) {
+                Toast.makeText(this, "Could not open installer: ${e.message}", Toast.LENGTH_LONG).show()
+            }
+        }
+
+        btnReject.setOnClickListener {
+            ApkPreInstallStaging.deleteStaged(stagedApk)
+            removeCard()
+            Snackbar.make(container, "Staged APK removed.", Snackbar.LENGTH_SHORT).show()
+        }
+
+        decisionRow.addView(btnInstall, LinearLayout.LayoutParams(
+            0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f
+        ).also { it.rightMargin = 16 })
+        decisionRow.addView(btnReject, LinearLayout.LayoutParams(
+            0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f
+        ))
+
+        val feedbackLayout = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            setPadding(0, 24, 0, 0)
+        }
+
+        val btnMarkSafe = MaterialButton(this, null, com.google.android.material.R.attr.materialButtonOutlinedStyle).apply {
+            text = "Mark safe"
+            iconTint = android.content.res.ColorStateList.valueOf(Color.parseColor("#2ECC71"))
+        }
+        val btnMarkMalware = MaterialButton(this, null, com.google.android.material.R.attr.materialButtonOutlinedStyle).apply {
+            text = "Mark malware"
+            iconTint = android.content.res.ColorStateList.valueOf(Color.parseColor("#E74C3C"))
+        }
+
+        val submitFeedback: (Boolean) -> Unit = { isMalware ->
+            btnMarkSafe.isEnabled = false
+            btnMarkMalware.isEnabled = false
+            btnMarkSafe.alpha = 0.4f
+            btnMarkMalware.alpha = 0.4f
+            sendFeedback(packageName, permissions, isMalware, cardView)
+        }
+        btnMarkSafe.setOnClickListener { submitFeedback(false) }
+        btnMarkMalware.setOnClickListener { submitFeedback(true) }
+
+        feedbackLayout.addView(btnMarkSafe, LinearLayout.LayoutParams(
+            0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f
+        ).also { it.rightMargin = 16 })
+        feedbackLayout.addView(btnMarkMalware, LinearLayout.LayoutParams(
+            0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f
+        ))
+
+        inner.addView(title)
+        inner.addView(sandboxHint)
+        inner.addView(badgeAndScore)
+        inner.addView(speedometer)
+        inner.addView(piiText)
+        inner.addView(sensitiveText)
+        inner.addView(decisionRow)
+        inner.addView(feedbackLayout)
+
+        row.addView(inner)
+        cardView.addView(row)
+        container.addView(cardView, 0)
+    }
+
     private fun sendFeedback(packageName: String, permissions: List<String>, isMalware: Boolean, view: View) {
         lifecycleScope.launch {
             try {
@@ -301,46 +568,5 @@ class MainActivity : AppCompatActivity() {
             setPadding(0, 8, 0, 8)
             setTextColor(Color.WHITE)
         })
-    }
-}
-
-class ScanHistoryAdapter(private val items: List<ScanRecord>) : RecyclerView.Adapter<ScanHistoryAdapter.VH>() {
-    inner class VH(view: View) : RecyclerView.ViewHolder(view) {
-        val tvPackage = view.findViewById<TextView>(R.id.tvPackage)
-        val tvRiskLevel = view.findViewById<TextView>(R.id.tvRiskLevel)
-        val tvScore = view.findViewById<TextView>(R.id.tvScore)
-        val tvTimestamp = view.findViewById<TextView>(R.id.tvTimestamp)
-    }
-
-    override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): VH {
-        val v = LayoutInflater.from(parent.context).inflate(R.layout.item_scan_history, parent, false)
-        return VH(v)
-    }
-
-    override fun getItemCount() = items.size
-
-    override fun onBindViewHolder(holder: VH, position: Int) {
-        val item = items[position]
-        holder.tvPackage.text = item.package_name
-        
-        val color = when (item.risk_level) {
-            "DANGEROUS"        -> Color.parseColor("#E74C3C")
-            "SUSPICIOUS"       -> Color.parseColor("#E67E22")
-            "HANDLE_WITH_CARE" -> Color.parseColor("#F39C12")
-            else               -> Color.parseColor("#2ECC71")
-        }
-
-        holder.tvRiskLevel.text = item.risk_level.replace("_", " ")
-        holder.tvRiskLevel.backgroundTintList = android.content.res.ColorStateList.valueOf(color)
-        
-        val rangeMatch = Regex("""\(Range: (\d+)-(\d+)\)""").find(item.leak_type ?: "")
-        if (rangeMatch != null) {
-            holder.tvScore.text = "Score: ${rangeMatch.groupValues[1]} - ${rangeMatch.groupValues[2]}"
-        } else {
-            holder.tvScore.text = "Score: ${"%.1f".format(item.score * 10.0)}" // Fallback scales old DB rows properly out to 100 
-        }
-
-        val ts = item.timestamp?.take(19)?.replace("T", "  ") ?: ""
-        holder.tvTimestamp.text = ts
     }
 }

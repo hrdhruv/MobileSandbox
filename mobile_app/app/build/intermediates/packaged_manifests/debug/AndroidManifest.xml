@@ -10,6 +10,7 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
+    <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <permission
         android:name="com.example.dataleakage.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"
@@ -24,7 +25,6 @@
         android:extractNativeLibs="false"
         android:label="Data Leakage Sandbox"
         android:networkSecurityConfig="@xml/network_security_config"
-        android:testOnly="true"
         android:theme="@style/Theme.MobileSandbox"
         android:usesCleartextTraffic="true" >
         <activity
@@ -41,6 +41,15 @@
             android:exported="false"
             android:label="Scan History" />
 
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="com.example.dataleakage.fileprovider"
+            android:exported="false"
+            android:grantUriPermissions="true" >
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
         <provider
             android:name="androidx.startup.InitializationProvider"
             android:authorities="com.example.dataleakage.androidx-startup"
