@@ -10,9 +10,6 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
-    <!-- Permission to see installed apps -->
-    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
-    <uses-permission android:name="android.permission.INTERNET" />
 
     <permission
         android:name="com.example.dataleakage.DYNAMIC_RECEIVER_NOT_EXPORTED_PERMISSION"

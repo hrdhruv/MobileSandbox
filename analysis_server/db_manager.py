@@ -167,6 +167,31 @@ def get_feedback_stats():
     return perm_stats
 
 
+def get_package_feedback_adjustment(package_name: str) -> float:
+    """
+    Net user labels for this package only (malware vs safe reports).
+    Returns a score delta on the 0–100 scale, capped, so feedback does not
+    change risk for other packages that share the same permissions.
+    """
+    if not package_name:
+        return 0.0
+    conn = sqlite3.connect(DB_PATH)
+    row = conn.execute(
+        """SELECT
+             COALESCE(SUM(CASE WHEN is_malware = 1 THEN 1 ELSE 0 END), 0),
+             COALESCE(SUM(CASE WHEN is_malware = 0 THEN 1 ELSE 0 END), 0)
+           FROM feedback WHERE package_name = ?""",
+        (package_name,),
+    ).fetchone()
+    conn.close()
+    if not row:
+        return 0.0
+    malware_n, safe_n = int(row[0]), int(row[1])
+    net = malware_n - safe_n
+    adj = net * 7.0
+    return max(-30.0, min(30.0, adj))
+
+
 # ─────────────── Scan History ───────────────
 
 def is_duplicate_scan(package_name: str, window_minutes: int = 5) -> bool:

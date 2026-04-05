@@ -151,31 +151,31 @@ def test_db_feedback_stats():
 
 
 # ──────────────────────────────────────────────
-#  7. Bayesian update raises risk after malware feedback
+#  7. Package feedback adjusts only that package's score
 # ──────────────────────────────────────────────
 
-def test_bayesian_update_increases_risk():
+def test_package_feedback_is_scoped_to_package():
     """
-    Marking an app as malware twice should increase the Bayesian risk
-    estimate for its permissions compared to the prior.
+    Malware/safe labels must not change global permission weights; only the
+    labeled package's score moves (reputation delta).
     """
-    perm = "android.permission.READ_SMS"
-    PRIOR = ml_engine.BETA_ALPHA_0 / (ml_engine.BETA_ALPHA_0 + ml_engine.BETA_BETA_0) * 10.0
+    p = "android.permission.READ_SMS"
+    perms = [p]
+
+    baseline_other = ml_engine.analyze_permissions(perms, package_name="com.other.app")["score_int"]
+    before_labeled = ml_engine.analyze_permissions(perms, package_name="com.labeled.app")["score_int"]
 
     ml_engine.adaptive_update(
-        package_name="com.testmal1",
-        android_permissions=[perm],
-        is_malware=True
-    )
-    ml_engine.adaptive_update(
-        package_name="com.testmal2",
-        android_permissions=[perm],
-        is_malware=True
+        package_name="com.labeled.app",
+        android_permissions=perms,
+        is_malware=True,
     )
 
-    bayes_risk = ml_engine.get_bayesian_risk("READ_SMS")
-    assert bayes_risk > PRIOR, \
-        f"Expected Bayesian risk > prior ({PRIOR:.2f}), got {bayes_risk:.2f}"
+    after_labeled = ml_engine.analyze_permissions(perms, package_name="com.labeled.app")["score_int"]
+    after_other = ml_engine.analyze_permissions(perms, package_name="com.other.app")["score_int"]
+
+    assert after_labeled > before_labeled, "Malware feedback should raise this package's score"
+    assert after_other == baseline_other, "Unrelated package must keep the same score"
 
 
 # ──────────────────────────────────────────────

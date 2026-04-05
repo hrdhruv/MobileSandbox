@@ -2,7 +2,6 @@ from fastapi import FastAPI, BackgroundTasks
 from pydantic import BaseModel
 from typing import Optional, List
 import uvicorn
-import statistics
 import ml_engine
 import db_manager
 import random
@@ -43,28 +42,19 @@ async def analyze(data: AppData):
     """
     Analyse an app's permissions and return a risk score.
 
-    Multi-scan: runs the analysis 5 times and uses the MEDIAN score as the
-    authoritative result (more robust than single-run; eliminates outliers).
-    Min/max range is still reported for display alongside the stable median.
+    Single deterministic evaluation (permission mix + models + package
+    reputation). Min/max match the point score for API compatibility.
 
     Returns 'confidence' [0–1]: how much the three internal signals agree.
     High confidence → the verdict is reliable.
     Low confidence  → signals are mixed; treat result with more caution.
     """
-    results = []
-    for _ in range(5):
-        r = ml_engine.analyze_permissions(data.permissions, package_name=data.package_name)
-        results.append(r)
-
-    scores = [r["score_int"] for r in results]
-    min_score = min(scores)
-    max_score = max(scores)
-
-    # Use median for stability — eliminates stochastic outliers
-    median_score = int(round(statistics.median(scores)))
-
-    # Pick the result closest to the median as the base
-    base_result = min(results, key=lambda r: abs(r["score_int"] - median_score))
+    base_result = ml_engine.analyze_permissions(
+        data.permissions, package_name=data.package_name
+    )
+    median_score = base_result["score_int"]
+    min_score = median_score
+    max_score = median_score
 
     enhanced_leak_type = (
         f"{base_result['leak_type']} (Range: {min_score}–{max_score})"
@@ -166,9 +156,9 @@ async def calibrate():
             "min_safe_samples": ml_engine.MIN_RETRAIN_SAFE,
         },
         "signal_weights": {
-            "signal_a_static": "55% (ML present) / 70% (ML absent)",
-            "signal_b_ml": "30% (ML present) / 0% (ML absent)",
-            "signal_c_bayesian": "15% (ML present) / 30% (ML absent)",
+            "signal_a_static": "58% (ML present) / 70% (ML absent)",
+            "signal_b_ml": "24% (ML present) / 0% (ML absent)",
+            "signal_c_prior": "18% (ML present) / 30% (ML absent); not cross-app feedback",
         },
         "known_safe_apps": ml_engine._known_safe_apps,
     }

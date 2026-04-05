@@ -4,8 +4,8 @@ ml_engine.py — Machine Learning engine for permission-based risk analysis.
 Scoring pipeline:
   1. Per-permission risk weights (individual, not broad matching)
   2. GradientBoostingClassifier (5-class) probability signal
-  3. Beta-Binomial Bayesian signal from user feedback
-  4. Weighted blend of all three for final score
+  3. Beta prior signal (permission-level; not polluted by other apps' labels)
+  4. Weighted blend; optional package-scoped user reputation delta from DB
 
 Fixes applied in v1 (legacy, see FIX-1 through FIX-6 below):
   FIX-1: Signal A amplification formula was a no-op → real power curve.
@@ -234,27 +234,19 @@ _bayes_cache = {}
 
 def get_bayesian_risk(perm_key: str) -> float:
     """
-    Beta-Binomial conjugate posterior risk for a single permission.
+    Beta prior mean for a permission (same for all apps).
 
-    Prior:     Beta(α₀=1, β₀=4)  — safe-biased (FIX-v2-1)
-    Evidence:  malware_count (α) and safe_count (β) from feedback DB
-    Posterior: Beta(α₀ + malware_count, β₀ + safe_count)
-    Mean:      α / (α + β)  ∈ [0,1], scaled to [0,10]
-
-    With no evidence: posterior mean = 1/(1+4) = 0.20 → 2.0/10 (safe assumption).
+    Uses Beta(α₀, β₀) only — not user feedback aggregated per permission.
+    Labeling one app safe/malware must not change scores for unrelated apps
+    that happen to share INTERNET or READ_PHONE_STATE (real sandbox behavior
+    uses package reputation, not global permission guilt-by-association).
     """
-    stats = db_manager.get_feedback_stats()
-    perm_stat = stats.get(perm_key, {"malware": 0, "safe": 0})
-
-    cache_key = (perm_key, perm_stat["malware"], perm_stat["safe"])
+    cache_key = ("prior", perm_key)
     if cache_key in _bayes_cache:
         return _bayes_cache[cache_key]
 
-    alpha = BETA_ALPHA_0 + perm_stat["malware"]
-    beta  = BETA_BETA_0  + perm_stat["safe"]
-
-    posterior_mean = alpha / (alpha + beta)   # ∈ [0, 1]
-    result = posterior_mean * 10.0            # scale to [0, 10]
+    posterior_mean = BETA_ALPHA_0 / (BETA_ALPHA_0 + BETA_BETA_0)
+    result = posterior_mean * 10.0
     _bayes_cache[cache_key] = result
     return result
 
@@ -657,9 +649,9 @@ def analyze_permissions(android_permissions, package_name=""):
     """
     Hybrid 3-signal scoring with v2 adaptive improvements.
 
-    Signal A — per-permission static weights  (55% ML present, 70% without)
-    Signal B — ML model class probabilities   (30% ML present, absent otherwise)
-    Signal C — Beta-Binomial Bayesian signal  (15% ML present, 30% without)
+    Signal A — per-permission static weights  (58% ML present, 70% without)
+    Signal B — ML model class probabilities   (24% ML present, absent otherwise)
+    Signal C — Beta prior (18% ML present, 30% without) — not user-feedback
 
     v2 additions (applied in order after blend):
       FIX-v2-3: Volume bonus counts only high-risk permissions.
@@ -668,7 +660,7 @@ def analyze_permissions(android_permissions, package_name=""):
       FIX-v2-6: Confidence score returned alongside result.
       FIX-v2-8: Known-safe app cap applied to final score.
     """
-    global feature_risk, ml_model, ml_model_ready
+    global ml_model, ml_model_ready
 
     pii_detected = set()
     sensitive_detected = set()
@@ -734,7 +726,7 @@ def analyze_permissions(android_permissions, package_name=""):
         ml_score = sum(p * w for p, w in zip(proba, ML_CLASS_WEIGHTS))
         ml_score = min(10.0, max(0.0, ml_score))
 
-    # ── Signal C: Beta-Binomial Bayesian signal ──
+    # ── Signal C: Beta prior (flat across permissions; evidence is in Signal A) ──
     bayesian_risks = [get_bayesian_risk(_perm_short_key(p)) for p in android_permissions]
     if bayesian_risks:
         top_bayes = sorted(bayesian_risks, reverse=True)[:15]
@@ -742,14 +734,15 @@ def analyze_permissions(android_permissions, package_name=""):
     else:
         bayes_score = 2.0   # FIX-v2-1: safe default when no permissions
 
-    # ── FIX-4 (v1): Weighted blend — redistributes ML weight if model unavailable ──
+    # ── FIX-4 (v1): Weighted blend — slightly more weight on static signal A
+    # so scores spread by actual permission mix (less ML saturation ~74/44).
     if ml_score is None:
         final_score = 0.70 * perm_score + 0.30 * bayes_score
     else:
         final_score = (
-            0.55 * perm_score +
-            0.30 * ml_score +
-            0.15 * bayes_score
+            0.58 * perm_score +
+            0.24 * ml_score +
+            0.18 * bayes_score
         )
 
     # FIX-v2-5: Danger-ratio context dampener.
@@ -768,6 +761,9 @@ def analyze_permissions(android_permissions, package_name=""):
     # FIX-v2-8: Apply known-safe app score cap (if package name provided)
     if package_name:
         final_score_scaled = _apply_known_safe_cap(package_name, final_score_scaled)
+        # Package-scoped user labels only (does not alter global permission weights)
+        rep = db_manager.get_package_feedback_adjustment(package_name)
+        final_score_scaled = max(0.0, min(100.0, final_score_scaled + rep))
 
     # FIX-v2-6: Compute confidence
     confidence = _compute_confidence(perm_score, ml_score, bayes_score)
@@ -791,17 +787,12 @@ def analyze_permissions(android_permissions, package_name=""):
 def adaptive_update(package_name, android_permissions, is_malware,
                     user_notes=""):
     """
-    Bayesian adaptive update using Beta-Binomial conjugate model.
+    Record user feedback for this package. Scoring applies a package-only
+    reputation delta in analyze_permissions(); we do not mutate global
+    permission weights (that incorrectly changed every app's score).
 
-    For each permission p:
-      α  = α₀ + feedback_malware_count(p)
-      β  = β₀ + feedback_safe_count(p)
-      Posterior mean = α/(α+β) → new risk weight on [0,1] → scaled [0,10]
-
-    v2: After persisting, check whether total feedback count has crossed a
-    multiple of AUTO_RETRAIN_EVERY (FIX-v2-7). If so, trigger auto-retrain.
+    Optional bulk retrain still uses feedback rows as pseudo-samples (FIX-v2-7).
     """
-    # Persist to DB — future scoring calls will pick this up automatically
     db_manager.save_feedback(
         package_name=package_name,
         permissions=android_permissions,
@@ -809,26 +800,8 @@ def adaptive_update(package_name, android_permissions, is_malware,
         user_notes=user_notes
     )
 
-    # Lightweight update to in-memory tables
-    _bayes_cache.clear()   # invalidate cache so next call reflects new evidence
-    stats = db_manager.get_feedback_stats()
-    for perm in android_permissions:
-        key = _perm_short_key(perm)
-        perm_stat = stats.get(key, {"malware": 0, "safe": 0})
-        alpha = BETA_ALPHA_0 + perm_stat["malware"]
-        beta  = BETA_BETA_0  + perm_stat["safe"]
-        posterior_risk_10 = (alpha / (alpha + beta)) * 10.0  # 0-10
-        PERMISSION_RISK_TABLE[key] = posterior_risk_10
-
-        # Mirror to JSON feature_risk where keys match
-        for feature in list(feature_risk.keys()):
-            parts = key.split("_")
-            if any(p in feature for p in parts if len(p) >= 3):
-                feature_risk[feature]["risk"] = min(100.0, posterior_risk_10 * 10.0)
-
-    save_model()
-    print(f"[ml_engine] Beta-Binomial update for {package_name} "
+    _bayes_cache.clear()
+    print(f"[ml_engine] Feedback recorded for {package_name} "
           f"(malware={is_malware})")
 
-    # FIX-v2-7: Check auto-retrain threshold
     _check_auto_retrain()

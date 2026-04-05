@@ -82,9 +82,10 @@ class MainActivity : AppCompatActivity() {
             lottieScan.visibility = View.VISIBLE
 
             lifecycleScope.launch {
+                // Do not skip apps with zero declared permissions — some installers
+                // or edge cases return empty requestedPermissions; others still matter for inventory.
                 val apps = withContext(Dispatchers.IO) {
-                    scanner.getInstalledApps()
-                        .filter { scanner.getPermissions(it.packageName).isNotEmpty() }
+                    scanner.getInstalledApps(includeSystemApps = false)
                 }
 
                 for (app in apps) {
