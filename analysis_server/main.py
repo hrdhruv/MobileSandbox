@@ -1,4 +1,4 @@
-from fastapi import FastAPI, BackgroundTasks
+from fastapi import FastAPI, BackgroundTasks, HTTPException
 from pydantic import BaseModel
 from typing import Optional, List
 import uvicorn
@@ -18,6 +18,7 @@ app = FastAPI(title="MobileSandbox Analysis Server")
 class AppData(BaseModel):
     package_name: str
     permissions: List[str]
+    user_id: str = "anonymous"
 
 
 class FeedbackData(BaseModel):
@@ -25,6 +26,7 @@ class FeedbackData(BaseModel):
     permissions: List[str]
     is_malware: bool
     user_notes: Optional[str] = ""
+    user_id: str = "anonymous"
 
 
 # ─────────────── Lifecycle ───────────────
@@ -69,6 +71,7 @@ async def analyze(data: AppData):
         sensitive_detected=base_result["sensitive_detected"],
         detected_threats=base_result["flags"],
         confidence=base_result.get("confidence", 1.0),
+        user_id=data.user_id,
     )
 
     return {
@@ -88,11 +91,15 @@ async def analyze(data: AppData):
 
 @app.post("/feedback")
 async def feedback(data: FeedbackData):
+    if db_manager.check_feedback_cooldown(data.user_id, data.package_name):
+        raise HTTPException(status_code=429, detail="Too many reports in the last hour for this app.")
+
     ml_engine.adaptive_update(
         package_name=data.package_name,
         android_permissions=data.permissions,
         is_malware=data.is_malware,
-        user_notes=data.user_notes or ""
+        user_notes=data.user_notes or "",
+        user_id=data.user_id
     )
     return {
         "status": "feedback recorded and adaptive learning update applied",
@@ -111,6 +118,11 @@ async def feedback_history():
 @app.get("/scan/history")
 async def scan_history():
     return {"scans": db_manager.get_scan_history()}
+
+
+@app.get("/ratings/progression")
+async def rating_progression():
+    return db_manager.get_rating_progression()
 
 
 # ─────────────── Stats Endpoint ───────────────
