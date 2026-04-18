@@ -1,9 +1,13 @@
 package com.example.dataleakage
 
+import android.app.PendingIntent
+import android.content.Context
 import android.content.Intent
 import android.graphics.Color
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
+import android.provider.Settings
 import android.view.View
 import android.view.ViewGroup
 import android.widget.LinearLayout
@@ -11,7 +15,6 @@ import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
-import androidx.core.content.FileProvider
 import androidx.constraintlayout.widget.ConstraintLayout
 import androidx.recyclerview.widget.LinearLayoutManager
 import androidx.recyclerview.widget.RecyclerView
@@ -34,10 +37,21 @@ import java.io.File
 
 class MainActivity : AppCompatActivity() {
 
-    private val pickApkLauncher = registerForActivityResult(
-        ActivityResultContracts.OpenDocument()
-    ) { uri: Uri? ->
-        if (uri != null) processPickedApk(uri)
+    private val pickPreInstallApksLauncher = registerForActivityResult(
+        ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode != RESULT_OK) return@registerForActivityResult
+        val data = result.data ?: return@registerForActivityResult
+        val uris = mutableListOf<Uri>()
+        val clip = data.clipData
+        if (clip != null && clip.itemCount > 0) {
+            for (i in 0 until clip.itemCount) {
+                clip.getItemAt(i).uri?.let { uris.add(it) }
+            }
+        } else {
+            data.data?.let { uris.add(it) }
+        }
+        if (uris.isNotEmpty()) processPickedApks(uris)
     }
 
     private lateinit var viewScan: ConstraintLayout
@@ -69,7 +83,22 @@ class MainActivity : AppCompatActivity() {
 
         findViewById<com.google.android.material.button.MaterialButton>(R.id.btnPreInstallApk)
             .setOnClickListener {
-                pickApkLauncher.launch(arrayOf("application/vnd.android.package-archive"))
+                val intent = Intent(Intent.ACTION_OPEN_DOCUMENT).apply {
+                    addCategory(Intent.CATEGORY_OPENABLE)
+                    type = "*/*"
+                    putExtra(
+                        Intent.EXTRA_MIME_TYPES,
+                        arrayOf(
+                            "application/vnd.android.package-archive",
+                            "application/octet-stream"
+                        )
+                    )
+                    putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true)
+                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+                    addFlags(Intent.FLAG_GRANT_WRITE_URI_PERMISSION)
+                    addFlags(Intent.FLAG_GRANT_PERSISTABLE_URI_PERMISSION)
+                }
+                pickPreInstallApksLauncher.launch(intent)
             }
 
         bottomNav.setOnItemSelectedListener { item ->
@@ -126,32 +155,84 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
+     * [targetAppPackageName] is the APK’s applicationId (e.g. com.reddit.frontpage). Required for
+     * split installs on API 31+ via [PackageInstaller.SessionParams.setAppPackageName].
+     */
+    private fun launchSessionInstall(stagedParts: List<File>, targetAppPackageName: String) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+            !packageManager.canRequestPackageInstalls()
+        ) {
+            Toast.makeText(
+                this,
+                "Allow “Install unknown apps” for this app — opening Settings.",
+                Toast.LENGTH_LONG
+            ).show()
+            startActivity(
+                Intent(
+                    Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES,
+                    Uri.parse("package:$packageName")
+                )
+            )
+            return
+        }
+
+        val piFlags = PendingIntent.FLAG_UPDATE_CURRENT or
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) PendingIntent.FLAG_MUTABLE else 0
+        val pendingIntent = PendingIntent.getBroadcast(
+            this,
+            (System.nanoTime() and 0x7FFFFFFF).toInt(),
+            Intent(this, InstallCommitReceiver::class.java),
+            piFlags
+        )
+
+        val r = SplitApkSessionInstall.install(
+            this, stagedParts, targetAppPackageName, pendingIntent
+        )
+        if (r.isFailure) {
+            Toast.makeText(
+                this,
+                "Install failed: ${r.exceptionOrNull()?.message}",
+                Toast.LENGTH_LONG
+            ).show()
+        }
+    }
+
+    /**
      * Stock-Android "pre-install" path: APK is copied to app-private cache only,
      * permissions are read via [PackageManager.getPackageArchiveInfo], then the user
      * may open the system installer or delete the staged file.
      */
-    private fun processPickedApk(uri: Uri) {
+    private fun processPickedApks(uris: List<Uri>) {
+        ApkPreInstallStaging.takePersistableReadWrite(this, uris)
         lifecycleScope.launch {
             lottieScan.visibility = View.VISIBLE
             val staged = withContext(Dispatchers.IO) {
-                ApkPreInstallStaging.stageApkFromUri(this@MainActivity, uri)
+                ApkPreInstallStaging.stageApksFromUris(this@MainActivity, uris)
             }
-            if (staged == null) {
+            if (staged.isEmpty()) {
                 lottieScan.visibility = View.GONE
                 Toast.makeText(
                     this@MainActivity,
-                    "Could not read APK (try another file source).",
+                    "Could not read APK file(s).",
                     Toast.LENGTH_LONG
                 ).show()
                 return@launch
             }
             val pkgInfo = withContext(Dispatchers.IO) {
-                ApkPreInstallStaging.readPackageInfo(this@MainActivity, staged)
+                if (staged.size == 1) {
+                    ApkPreInstallStaging.readPackageInfo(this@MainActivity, staged.first())
+                } else {
+                    ApkPreInstallStaging.readPackageInfoFromSplitSet(this@MainActivity, staged)
+                }
             }
             if (pkgInfo == null) {
-                ApkPreInstallStaging.deleteStaged(staged)
+                ApkPreInstallStaging.deleteStagedList(staged)
                 lottieScan.visibility = View.GONE
-                Toast.makeText(this@MainActivity, "Invalid or corrupt APK.", Toast.LENGTH_LONG).show()
+                Toast.makeText(
+                    this@MainActivity,
+                    "Invalid APK. For splits, include base.apk.",
+                    Toast.LENGTH_LONG
+                ).show()
                 return@launch
             }
             val packageName = pkgInfo.packageName ?: "unknown"
@@ -161,12 +242,12 @@ class MainActivity : AppCompatActivity() {
                     RetrofitClient.api.analyzeApp(AnalysisRequest(packageName, permissions))
                 }
                 addPreInstallScanResult(
-                    container, staged, packageName,
+                    container, staged, uris, packageName,
                     response.risk_level, response.score,
                     response.pii_detected, response.sensitive_detected, permissions
                 )
             } catch (_: Exception) {
-                ApkPreInstallStaging.deleteStaged(staged)
+                ApkPreInstallStaging.deleteStagedList(staged)
                 addError(container, packageName)
             }
             lottieScan.visibility = View.GONE
@@ -346,7 +427,8 @@ class MainActivity : AppCompatActivity() {
 
     private fun addPreInstallScanResult(
         container: LinearLayout,
-        stagedApk: File,
+        stagedParts: List<File>,
+        sourceUris: List<Uri>,
         packageName: String,
         level: String,
         score: Int,
@@ -398,8 +480,19 @@ class MainActivity : AppCompatActivity() {
         }
 
         val sandboxHint = TextView(this).apply {
-            text = "Pre-install scan — APK staged in app sandbox only (not installed)."
-            textSize = 12f
+            val n = stagedParts.size
+            text = buildString {
+                if (n <= 1) {
+                    append("Pre-install scan — copy is in app sandbox only. ")
+                } else {
+                    append("Pre-install scan — $n APK parts in sandbox. ")
+                }
+                append("Reject removes the sandbox copy and, when allowed, the file(s) you picked in Downloads/Files. ")
+                append("Tap “Install to device” for Android’s install prompt (emulator: also check the notification shade if nothing pops up). ")
+                append("For store-style bundles (e.g. Reddit), multi-select every split from the same .apks extract (arch, density, language) or install fails with “missing split”. ")
+                append("Browser downloads use Chrome, not this app — use Files or adb push.")
+            }
+            textSize = 11f
             setTextColor(Color.parseColor("#5C6BC0"))
             setPadding(0, 8, 0, 0)
         }
@@ -476,25 +569,50 @@ class MainActivity : AppCompatActivity() {
 
         btnInstall.setOnClickListener {
             try {
-                val contentUri = FileProvider.getUriForFile(
-                    this,
-                    "${BuildConfig.APPLICATION_ID}.fileprovider",
-                    stagedApk
-                )
-                val intent = Intent(Intent.ACTION_INSTALL_PACKAGE).apply {
-                    data = contentUri
-                    flags = Intent.FLAG_GRANT_READ_URI_PERMISSION
+                val splitLooking = stagedParts.any {
+                    it.name.startsWith("split_config", ignoreCase = true)
                 }
-                startActivity(intent)
+                if (stagedParts.size == 1 &&
+                    stagedParts.first().name.equals("base.apk", ignoreCase = true) &&
+                    !splitLooking
+                ) {
+                    Toast.makeText(
+                        this,
+                        "Split APK: pick base.apk and every split_config.*.apk in one go (same as adb install-multiple).",
+                        Toast.LENGTH_LONG
+                    ).show()
+                    return@setOnClickListener
+                }
+                launchSessionInstall(stagedParts, packageName)
             } catch (e: Exception) {
                 Toast.makeText(this, "Could not open installer: ${e.message}", Toast.LENGTH_LONG).show()
             }
         }
 
         btnReject.setOnClickListener {
-            ApkPreInstallStaging.deleteStaged(stagedApk)
+            ApkPreInstallStaging.deleteStagedList(stagedParts)
+            val del = ApkPreInstallStaging.tryDeleteSourceUris(this, sourceUris)
+            for (uri in sourceUris) {
+                try {
+                    contentResolver.releasePersistableUriPermission(
+                        uri,
+                        Intent.FLAG_GRANT_READ_URI_PERMISSION or Intent.FLAG_GRANT_WRITE_URI_PERMISSION
+                    )
+                } catch (_: Exception) {
+                }
+            }
             removeCard()
-            Snackbar.make(container, "Staged APK removed.", Snackbar.LENGTH_SHORT).show()
+            val msg = when {
+                sourceUris.isEmpty() ->
+                    "Sandbox copy removed."
+                del.failedCount == 0 ->
+                    "Removed sandbox copy and ${del.deletedCount} original file(s)."
+                del.deletedCount == 0 ->
+                    "Sandbox copy removed. Originals are still in Downloads — delete them in Files (picker did not allow remove)."
+                else ->
+                    "Sandbox removed. Deleted ${del.deletedCount} original(s); ${del.failedCount} left in Downloads."
+            }
+            Snackbar.make(container, msg, Snackbar.LENGTH_LONG).show()
         }
 
         decisionRow.addView(btnInstall, LinearLayout.LayoutParams(

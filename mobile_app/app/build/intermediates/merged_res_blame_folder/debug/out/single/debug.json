@@ -1,38 +1,34 @@
 [
     {
-        "merged": "/home/harsh-d/.gradle/daemon/8.2/com.example.dataleakage.app-merged_res-35:/layout_activity_main.xml.flat",
-        "source": "/home/harsh-d/.gradle/daemon/8.2/com.example.dataleakage.app-main-37:/layout/activity_main.xml"
-    },
-    {
-        "merged": "/home/harsh-d/.gradle/daemon/8.2/com.example.dataleakage.app-merged_res-35:/xml_file_paths.xml.flat",
-        "source": "/home/harsh-d/.gradle/daemon/8.2/com.example.dataleakage.app-main-37:/xml/file_paths.xml"
-    },
-    {
-        "merged": "/home/harsh-d/.gradle/daemon/8.2/com.example.dataleakage.app-merged_res-35:/drawable_bg_gradient_dark.xml.flat",
-        "source": "/home/harsh-d/.gradle/daemon/8.2/com.example.dataleakage.app-main-37:/drawable/bg_gradient_dark.xml"
+        "merged": "com.example.dataleakage.app-merged_res-35:/layout_item_scan_history.xml.flat",
+        "source": "com.example.dataleakage.app-main-37:/layout/item_scan_history.xml"
     },
     {
         "merged": "com.example.dataleakage.app-merged_res-35:/layout_activity_main.xml.flat",
         "source": "com.example.dataleakage.app-main-37:/layout/activity_main.xml"
     },
     {
-        "merged": "/home/harsh-d/.gradle/daemon/8.2/com.example.dataleakage.app-merged_res-35:/menu_bottom_nav_menu.xml.flat",
-        "source": "/home/harsh-d/.gradle/daemon/8.2/com.example.dataleakage.app-main-37:/menu/bottom_nav_menu.xml"
+        "merged": "com.example.dataleakage.app-merged_res-35:/xml_network_security_config.xml.flat",
+        "source": "com.example.dataleakage.app-main-37:/xml/network_security_config.xml"
     },
     {
-        "merged": "/home/harsh-d/.gradle/daemon/8.2/com.example.dataleakage.app-merged_res-35:/xml_network_security_config.xml.flat",
-        "source": "/home/harsh-d/.gradle/daemon/8.2/com.example.dataleakage.app-main-37:/xml/network_security_config.xml"
+        "merged": "com.example.dataleakage.app-merged_res-35:/layout_activity_scan_history.xml.flat",
+        "source": "com.example.dataleakage.app-main-37:/layout/activity_scan_history.xml"
     },
     {
-        "merged": "/home/harsh-d/.gradle/daemon/8.2/com.example.dataleakage.app-merged_res-35:/layout_item_scan_history.xml.flat",
-        "source": "/home/harsh-d/.gradle/daemon/8.2/com.example.dataleakage.app-main-37:/layout/item_scan_history.xml"
+        "merged": "com.example.dataleakage.app-merged_res-35:/xml_file_paths.xml.flat",
+        "source": "com.example.dataleakage.app-main-37:/xml/file_paths.xml"
     },
     {
-        "merged": "/home/harsh-d/.gradle/daemon/8.2/com.example.dataleakage.app-merged_res-35:/drawable_badge_bg.xml.flat",
-        "source": "/home/harsh-d/.gradle/daemon/8.2/com.example.dataleakage.app-main-37:/drawable/badge_bg.xml"
+        "merged": "com.example.dataleakage.app-merged_res-35:/drawable_bg_gradient_dark.xml.flat",
+        "source": "com.example.dataleakage.app-main-37:/drawable/bg_gradient_dark.xml"
     },
     {
-        "merged": "/home/harsh-d/.gradle/daemon/8.2/com.example.dataleakage.app-merged_res-35:/layout_activity_scan_history.xml.flat",
-        "source": "/home/harsh-d/.gradle/daemon/8.2/com.example.dataleakage.app-main-37:/layout/activity_scan_history.xml"
+        "merged": "com.example.dataleakage.app-merged_res-35:/drawable_badge_bg.xml.flat",
+        "source": "com.example.dataleakage.app-main-37:/drawable/badge_bg.xml"
+    },
+    {
+        "merged": "com.example.dataleakage.app-merged_res-35:/menu_bottom_nav_menu.xml.flat",
+        "source": "com.example.dataleakage.app-main-37:/menu/bottom_nav_menu.xml"
     }
 ]

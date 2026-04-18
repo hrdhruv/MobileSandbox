@@ -1,20 +1,20 @@
 -- Merging decision tree log ---
 provider#androidx.core.content.FileProvider
-INJECTED from /home/harsh-d/Desktop/MobileSandbox/mobile_app/app/src/main/AndroidManifest.xml:34:9-42:20
+INJECTED from /home/harsh-d/Desktop/MobileSandbox/mobile_app/app/src/main/AndroidManifest.xml:38:9-46:20
 	android:grantUriPermissions
-		ADDED from /home/harsh-d/Desktop/MobileSandbox/mobile_app/app/src/main/AndroidManifest.xml:38:13-47
+		ADDED from /home/harsh-d/Desktop/MobileSandbox/mobile_app/app/src/main/AndroidManifest.xml:42:13-47
 	android:authorities
 		INJECTED from /home/harsh-d/Desktop/MobileSandbox/mobile_app/app/src/main/AndroidManifest.xml
-		ADDED from /home/harsh-d/Desktop/MobileSandbox/mobile_app/app/src/main/AndroidManifest.xml:36:13-64
+		ADDED from /home/harsh-d/Desktop/MobileSandbox/mobile_app/app/src/main/AndroidManifest.xml:40:13-64
 	android:exported
-		ADDED from /home/harsh-d/Desktop/MobileSandbox/mobile_app/app/src/main/AndroidManifest.xml:37:13-37
+		ADDED from /home/harsh-d/Desktop/MobileSandbox/mobile_app/app/src/main/AndroidManifest.xml:41:13-37
 	android:name
-		ADDED from /home/harsh-d/Desktop/MobileSandbox/mobile_app/app/src/main/AndroidManifest.xml:35:13-62
+		ADDED from /home/harsh-d/Desktop/MobileSandbox/mobile_app/app/src/main/AndroidManifest.xml:39:13-62
 manifest
-ADDED from /home/harsh-d/Desktop/MobileSandbox/mobile_app/app/src/main/AndroidManifest.xml:1:1-46:12
-INJECTED from /home/harsh-d/Desktop/MobileSandbox/mobile_app/app/src/main/AndroidManifest.xml:1:1-46:12
-INJECTED from /home/harsh-d/Desktop/MobileSandbox/mobile_app/app/src/main/AndroidManifest.xml:1:1-46:12
-INJECTED from /home/harsh-d/Desktop/MobileSandbox/mobile_app/app/src/main/AndroidManifest.xml:1:1-46:12
+ADDED from /home/harsh-d/Desktop/MobileSandbox/mobile_app/app/src/main/AndroidManifest.xml:1:1-50:12
+INJECTED from /home/harsh-d/Desktop/MobileSandbox/mobile_app/app/src/main/AndroidManifest.xml:1:1-50:12
+INJECTED from /home/harsh-d/Desktop/MobileSandbox/mobile_app/app/src/main/AndroidManifest.xml:1:1-50:12
+INJECTED from /home/harsh-d/Desktop/MobileSandbox/mobile_app/app/src/main/AndroidManifest.xml:1:1-50:12
 MERGED from [com.google.android.material:material:1.11.0] /home/harsh-d/.gradle/caches/transforms-3/bec7de6f5493746bd6b85bdfc260f89d/transformed/material-1.11.0/AndroidManifest.xml:17:1-24:12
 MERGED from [androidx.constraintlayout:constraintlayout:2.1.4] /home/harsh-d/.gradle/caches/transforms-3/5b1e847eb52da651a87fd4b6c66d222b/transformed/constraintlayout-2.1.4/AndroidManifest.xml:2:1-11:12
 MERGED from [com.airbnb.android:lottie:6.4.0] /home/harsh-d/.gradle/caches/transforms-3/a9b066030f4bdfbe90e2a6cd981e8459/transformed/jetified-lottie-6.4.0/AndroidManifest.xml:2:1-9:12
@@ -86,8 +86,8 @@ ADDED from /home/harsh-d/Desktop/MobileSandbox/mobile_app/app/src/main/AndroidMa
 	android:name
 		ADDED from /home/harsh-d/Desktop/MobileSandbox/mobile_app/app/src/main/AndroidManifest.xml:9:22-80
 application
-ADDED from /home/harsh-d/Desktop/MobileSandbox/mobile_app/app/src/main/AndroidManifest.xml:11:5-44:19
-INJECTED from /home/harsh-d/Desktop/MobileSandbox/mobile_app/app/src/main/AndroidManifest.xml:11:5-44:19
+ADDED from /home/harsh-d/Desktop/MobileSandbox/mobile_app/app/src/main/AndroidManifest.xml:11:5-48:19
+INJECTED from /home/harsh-d/Desktop/MobileSandbox/mobile_app/app/src/main/AndroidManifest.xml:11:5-48:19
 MERGED from [com.google.android.material:material:1.11.0] /home/harsh-d/.gradle/caches/transforms-3/bec7de6f5493746bd6b85bdfc260f89d/transformed/material-1.11.0/AndroidManifest.xml:22:5-20
 MERGED from [com.google.android.material:material:1.11.0] /home/harsh-d/.gradle/caches/transforms-3/bec7de6f5493746bd6b85bdfc260f89d/transformed/material-1.11.0/AndroidManifest.xml:22:5-20
 MERGED from [androidx.constraintlayout:constraintlayout:2.1.4] /home/harsh-d/.gradle/caches/transforms-3/5b1e847eb52da651a87fd4b6c66d222b/transformed/constraintlayout-2.1.4/AndroidManifest.xml:9:5-20
@@ -144,12 +144,18 @@ ADDED from /home/harsh-d/Desktop/MobileSandbox/mobile_app/app/src/main/AndroidMa
 		ADDED from /home/harsh-d/Desktop/MobileSandbox/mobile_app/app/src/main/AndroidManifest.xml:31:13-37
 	android:name
 		ADDED from /home/harsh-d/Desktop/MobileSandbox/mobile_app/app/src/main/AndroidManifest.xml:30:13-48
-meta-data#android.support.FILE_PROVIDER_PATHS
-ADDED from /home/harsh-d/Desktop/MobileSandbox/mobile_app/app/src/main/AndroidManifest.xml:39:13-41:54
-	android:resource
-		ADDED from /home/harsh-d/Desktop/MobileSandbox/mobile_app/app/src/main/AndroidManifest.xml:41:17-51
+receiver#com.example.dataleakage.InstallCommitReceiver
+ADDED from /home/harsh-d/Desktop/MobileSandbox/mobile_app/app/src/main/AndroidManifest.xml:34:9-36:40
+	android:exported
+		ADDED from /home/harsh-d/Desktop/MobileSandbox/mobile_app/app/src/main/AndroidManifest.xml:36:13-37
 	android:name
-		ADDED from /home/harsh-d/Desktop/MobileSandbox/mobile_app/app/src/main/AndroidManifest.xml:40:17-67
+		ADDED from /home/harsh-d/Desktop/MobileSandbox/mobile_app/app/src/main/AndroidManifest.xml:35:13-50
+meta-data#android.support.FILE_PROVIDER_PATHS
+ADDED from /home/harsh-d/Desktop/MobileSandbox/mobile_app/app/src/main/AndroidManifest.xml:43:13-45:54
+	android:resource
+		ADDED from /home/harsh-d/Desktop/MobileSandbox/mobile_app/app/src/main/AndroidManifest.xml:45:17-51
+	android:name
+		ADDED from /home/harsh-d/Desktop/MobileSandbox/mobile_app/app/src/main/AndroidManifest.xml:44:17-67
 uses-sdk
 INJECTED from /home/harsh-d/Desktop/MobileSandbox/mobile_app/app/src/main/AndroidManifest.xml reason: use-sdk injection requested
 INJECTED from /home/harsh-d/Desktop/MobileSandbox/mobile_app/app/src/main/AndroidManifest.xml

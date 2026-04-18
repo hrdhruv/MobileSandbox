@@ -31,6 +31,10 @@
             android:exported="false"
             android:label="Scan History" />
 
+        <receiver
+            android:name=".InstallCommitReceiver"
+            android:exported="false" />
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.fileprovider"

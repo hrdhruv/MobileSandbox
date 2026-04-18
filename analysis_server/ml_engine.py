@@ -785,7 +785,7 @@ def analyze_permissions(android_permissions, package_name=""):
 # ================= ADAPTIVE LEARNING (Beta-Binomial) =================
 
 def adaptive_update(package_name, android_permissions, is_malware,
-                    user_notes=""):
+                    user_notes="", user_id="anonymous"):
     """
     Record user feedback for this package. Scoring applies a package-only
     reputation delta in analyze_permissions(); we do not mutate global
@@ -797,7 +797,8 @@ def adaptive_update(package_name, android_permissions, is_malware,
         package_name=package_name,
         permissions=android_permissions,
         is_malware=is_malware,
-        user_notes=user_notes
+        user_notes=user_notes,
+        user_id=user_id
     )
 
     _bayes_cache.clear()

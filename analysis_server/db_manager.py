@@ -49,7 +49,8 @@ def init_db():
             permissions TEXT,
             is_malware INTEGER NOT NULL,
             user_notes TEXT DEFAULT '',
-            timestamp TEXT NOT NULL
+            timestamp TEXT NOT NULL,
+            user_id TEXT DEFAULT 'anonymous'
         )
     """)
 
@@ -64,7 +65,8 @@ def init_db():
             sensitive_detected TEXT,
             detected_threats TEXT,
             confidence REAL DEFAULT 1.0,
-            timestamp TEXT NOT NULL
+            timestamp TEXT NOT NULL,
+            user_id TEXT DEFAULT 'anonymous'
         )
     """)
 
@@ -74,6 +76,17 @@ def init_db():
     if "confidence" not in scan_cols:
         c.execute("ALTER TABLE scan_history ADD COLUMN confidence REAL DEFAULT 1.0")
         print("[db_manager] Migrated scan_history: added confidence column.")
+        
+    # ── Migrate missing user_id columns ──
+    c.execute("PRAGMA table_info(feedback)")
+    fb_cols = {row[1] for row in c.fetchall()}
+    if "user_id" not in fb_cols:
+        c.execute("ALTER TABLE feedback ADD COLUMN user_id TEXT DEFAULT 'anonymous'")
+        print("[db_manager] Migrated feedback: added user_id column.")
+        
+    if "user_id" not in scan_cols:
+        c.execute("ALTER TABLE scan_history ADD COLUMN user_id TEXT DEFAULT 'anonymous'")
+        print("[db_manager] Migrated scan_history: added user_id column.")
 
     # ── SQLite VIEW: per-permission feedback aggregates (fast querying) ──
     c.execute("DROP VIEW IF EXISTS feedback_summary")
@@ -99,24 +112,67 @@ def init_db():
 # ─────────────── Feedback ───────────────
 
 def save_feedback(package_name: str, permissions: list, is_malware: bool,
-                  user_notes: str = ""):
+                  user_notes: str = "", user_id: str = "anonymous"):
     """Persist a user feedback report."""
     conn = sqlite3.connect(DB_PATH)
     c = conn.cursor()
     c.execute(
         """INSERT INTO feedback
-           (package_name, permissions, is_malware, user_notes, timestamp)
-           VALUES (?, ?, ?, ?, ?)""",
+           (package_name, permissions, is_malware, user_notes, timestamp, user_id)
+           VALUES (?, ?, ?, ?, ?, ?)""",
         (
             package_name,
             json.dumps(permissions),
             1 if is_malware else 0,
             user_notes,
-            datetime.utcnow().isoformat()
+            datetime.utcnow().isoformat(),
+            user_id
         )
     )
     conn.commit()
     conn.close()
+
+
+def check_feedback_cooldown(user_id: str, package_name: str) -> bool:
+    """
+    Returns True if the user is in cooldown for this package.
+    Cooldown triggers if they have submitted 2 or more reports
+    in the last 1 hour for the same package.
+    """
+    if user_id == "anonymous":
+        pass # Anonymous users might be pooled, but we can rate limit them too
+    cutoff = (datetime.utcnow() - timedelta(hours=1)).isoformat()
+    conn = sqlite3.connect(DB_PATH)
+    c = conn.cursor()
+    row = c.execute(
+        """SELECT COUNT(*) FROM feedback
+           WHERE user_id = ? AND package_name = ? AND timestamp >= ?""",
+        (user_id, package_name, cutoff)
+    ).fetchone()
+    conn.close()
+    return int(row[0]) >= 2
+
+
+def get_rating_progression():
+    """
+    Returns the rating history for each app as a structured dict limit to recent.
+    Format: {"com.example.app": [{"user_id": ..., "is_malware": ..., "timestamp": ...}]}
+    """
+    conn = sqlite3.connect(DB_PATH)
+    conn.row_factory = sqlite3.Row
+    rows = conn.execute("SELECT package_name, user_id, is_malware, timestamp FROM feedback ORDER BY timestamp ASC").fetchall()
+    conn.close()
+    progression = {}
+    for r in rows:
+        pkg = r["package_name"]
+        if pkg not in progression:
+            progression[pkg] = []
+        progression[pkg].append({
+            "user_id": r["user_id"],
+            "is_malware": bool(r["is_malware"]),
+            "timestamp": r["timestamp"]
+        })
+    return progression
 
 
 def get_all_feedback():
@@ -214,7 +270,7 @@ def is_duplicate_scan(package_name: str, window_minutes: int = 5) -> bool:
 def save_scan_result(package_name: str, risk_level: str, score: float,
                      leak_type: str, pii_detected: list,
                      sensitive_detected: list, detected_threats: list,
-                     confidence: float = 1.0):
+                     confidence: float = 1.0, user_id: str = "anonymous"):
     """
     Persist an analysis result.
     Skips insertion if the same package was scanned within 5 minutes
@@ -230,8 +286,8 @@ def save_scan_result(package_name: str, risk_level: str, score: float,
         """INSERT INTO scan_history
            (package_name, risk_level, score, leak_type,
             pii_detected, sensitive_detected, detected_threats,
-            confidence, timestamp)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            confidence, timestamp, user_id)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
         (
             package_name,
             risk_level,
@@ -241,7 +297,8 @@ def save_scan_result(package_name: str, risk_level: str, score: float,
             json.dumps(sensitive_detected),
             json.dumps(detected_threats),
             confidence,
-            datetime.utcnow().isoformat()
+            datetime.utcnow().isoformat(),
+            user_id
         )
     )
     conn.commit()
