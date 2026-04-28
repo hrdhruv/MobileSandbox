@@ -1,5 +1,6 @@
 package com.example.dataleakage.api
 
+import com.example.dataleakage.BuildConfig
 import retrofit2.Retrofit
 import retrofit2.converter.gson.GsonConverterFactory
 import retrofit2.http.Body
@@ -18,11 +19,11 @@ interface AnalysisApi {
 }
 
 object RetrofitClient {
-    private const val BASE_URL = "http://10.0.2.2:8000/"
+    private val baseUrl: String = BuildConfig.ANALYSIS_API_BASE_URL
 
     val api: AnalysisApi by lazy {
         Retrofit.Builder()
-            .baseUrl(BASE_URL)
+            .baseUrl(baseUrl)
             .addConverterFactory(GsonConverterFactory.create())
             .build()
             .create(AnalysisApi::class.java)

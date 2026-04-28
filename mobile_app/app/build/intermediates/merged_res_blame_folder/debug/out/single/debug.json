@@ -9,7 +9,7 @@
     },
     {
         "merged": "com.example.dataleakage.app-merged_res-35:/xml_network_security_config.xml.flat",
-        "source": "com.example.dataleakage.app-main-37:/xml/network_security_config.xml"
+        "source": "com.example.dataleakage.app-debug-36:/xml/network_security_config.xml"
     },
     {
         "merged": "com.example.dataleakage.app-merged_res-35:/layout_activity_scan_history.xml.flat",

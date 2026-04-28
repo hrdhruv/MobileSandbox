@@ -329,7 +329,7 @@ class MainActivity : AppCompatActivity() {
 
         val title = TextView(this).apply {
             text = appName
-            setTextAppearance(android.R.style.TextAppearance_Material_Title) // TitleMedium equivalent or Material Components Title
+            setTextAppearance(this@MainActivity, android.R.style.TextAppearance_Material_Title) // TitleMedium equivalent or Material Components Title
             textSize = 20f
             setTextColor(Color.parseColor("#1A237E"))
             typeface = android.graphics.Typeface.DEFAULT_BOLD
@@ -473,7 +473,7 @@ class MainActivity : AppCompatActivity() {
 
         val title = TextView(this).apply {
             text = packageName
-            setTextAppearance(android.R.style.TextAppearance_Material_Title)
+            setTextAppearance(this@MainActivity, android.R.style.TextAppearance_Material_Title)
             textSize = 20f
             setTextColor(Color.parseColor("#1A237E"))
             typeface = android.graphics.Typeface.DEFAULT_BOLD

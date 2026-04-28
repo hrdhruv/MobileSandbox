@@ -3,16 +3,33 @@ plugins {
     id 'org.jetbrains.kotlin.android'
 }
 
+// Physical device: set in mobile_app/local.properties (same file as sdk.dir), e.g.:
+//   analysis.api.base.url=http://192.168.1.42:8000/
+// Emulator: omit property or use http://10.0.2.2:8000/
+def localProps = new Properties()
+def localFile = rootProject.file("local.properties")
+if (localFile.exists()) {
+    localFile.withInputStream { localProps.load(it) }
+}
+def analysisApiBaseUrl = localProps.getProperty("analysis.api.base.url", "http://10.0.2.2:8000/")
+if (!analysisApiBaseUrl.endsWith("/")) {
+    analysisApiBaseUrl += "/"
+}
+def analysisApiBaseUrlEscaped = analysisApiBaseUrl
+        .replace("\\", "\\\\")
+        .replace("\"", "\\\"")
+
 android {
     namespace 'com.example.dataleakage'
     compileSdk 34
 
     defaultConfig {
         applicationId "com.example.dataleakage"
-        minSdk 26
+        minSdk 22
         targetSdk 34
         versionCode 1
         versionName "1.0"
+        buildConfigField "String", "ANALYSIS_API_BASE_URL", "\"${analysisApiBaseUrlEscaped}\""
     }
 
     buildTypes {

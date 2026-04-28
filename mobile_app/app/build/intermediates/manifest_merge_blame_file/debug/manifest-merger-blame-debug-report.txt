@@ -5,7 +5,7 @@
 5    android:versionName="1.0" >
 6
 7    <uses-sdk
-8        android:minSdkVersion="26"
+8        android:minSdkVersion="22"
 9        android:targetSdkVersion="34" />
 10
 11    <uses-permission android:name="android.permission.INTERNET" />
@@ -36,7 +36,7 @@
 23        android:appComponentFactory="androidx.core.app.CoreComponentFactory"
 23-->[androidx.core:core:1.12.0] /home/harsh-d/.gradle/caches/transforms-3/217cd4443c329c3de6d6b6409afab4f6/transformed/core-1.12.0/AndroidManifest.xml:28:18-86
 24        android:debuggable="true"
-25        android:extractNativeLibs="false"
+25        android:extractNativeLibs="true"
 26        android:label="Data Leakage Sandbox"
 26-->/home/harsh-d/Desktop/MobileSandbox/mobile_app/app/src/main/AndroidManifest.xml:15:9-45
 27        android:networkSecurityConfig="@xml/network_security_config"
