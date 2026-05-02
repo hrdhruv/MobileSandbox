@@ -9,7 +9,7 @@ import retrofit2.http.POST
 
 interface AnalysisApi {
     @POST("/analyze")
-    suspend fun analyzeApp(@Body request: AnalysisRequest): AnalysisResponse
+    suspend fun analyzeApp(@Body request: AnalysisRequest): AnalysisResponsei
 
     @POST("/feedback")
     suspend fun sendFeedback(@Body request: FeedbackRequest): FeedbackResponse

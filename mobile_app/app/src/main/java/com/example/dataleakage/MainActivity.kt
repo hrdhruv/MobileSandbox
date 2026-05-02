@@ -370,14 +370,14 @@ class MainActivity : AppCompatActivity() {
         val piiText = TextView(this).apply {
             text = "PII: ${if (pii.isEmpty()) "None" else pii.joinToString(", ")}"
             textSize = 12f
-            setTextColor(Color.parseColor("#AAAAAA"))
+            setTextColor(Color.parseColor("#000000"))
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).also { it.topMargin = 16 }
         }
 
         val sensitiveText = TextView(this).apply {
             text = "Sensitive: ${if (sensitive.isEmpty()) "None" else sensitive.joinToString(", ")}"
             textSize = 12f
-            setTextColor(Color.parseColor("#AAAAAA"))
+            setTextColor(Color.parseColor("#000000"))
             layoutParams = LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT).also { it.topMargin = 8 }
         }
 
@@ -532,7 +532,7 @@ class MainActivity : AppCompatActivity() {
         val piiText = TextView(this).apply {
             text = "PII: ${if (pii.isEmpty()) "None" else pii.joinToString(", ")}"
             textSize = 12f
-            setTextColor(Color.parseColor("#AAAAAA"))
+            setTextColor(Color.parseColor("#000000"))
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT
@@ -542,7 +542,7 @@ class MainActivity : AppCompatActivity() {
         val sensitiveText = TextView(this).apply {
             text = "Sensitive: ${if (sensitive.isEmpty()) "None" else sensitive.joinToString(", ")}"
             textSize = 12f
-            setTextColor(Color.parseColor("#AAAAAA"))
+            setTextColor(Color.parseColor("#000000"))
             layoutParams = LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
                 LinearLayout.LayoutParams.WRAP_CONTENT
